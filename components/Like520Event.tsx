@@ -2139,7 +2139,7 @@ const DoneView: React.FC<{
                     marginBottom: 6,
                     textTransform: 'uppercase',
                     animation: 'l520-done-shimmer 2.4s ease-in-out infinite',
-                }}>with love</div>
+                }}>a dream like this</div>
                 <h2 style={{
                     fontFamily: "'Noto Serif SC', serif",
                     fontSize: 22,
@@ -2148,7 +2148,7 @@ const DoneView: React.FC<{
                     letterSpacing: 4,
                     textIndent: 4,
                     marginBottom: 14,
-                }}>谢谢你陪我度过这个下午</h2>
+                }}>感觉做了一场不错的梦</h2>
 
                 {/* 寄语 */}
                 <div style={{
@@ -2170,9 +2170,9 @@ const DoneView: React.FC<{
                         margin: 0,
                         letterSpacing: 0.5,
                     }}>
-                        今天的{userName}，<br />
-                        被ta看见的样子，<br />
-                        真好看。
+                        醒过来之后，<br />
+                        身上还带着一点 ta 的温度。<br />
+                        ——好像 ta 还在看着。
                     </p>
                 </div>
 
