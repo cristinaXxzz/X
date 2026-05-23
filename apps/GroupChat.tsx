@@ -787,6 +787,16 @@ ${recentGroupMsgs}
 ### 任务：生成一段精彩的群聊互动 (Conversation Flow)
 请作为导演，接管所有角色，让群聊**自然地流动起来**。
 
+### 重要补充：角色不是同一个模型的不同皮肤
+虽然你是统一导演，但每个角色都必须像独立的人。
+生成前请先判断每个角色此刻是否真的有发言动机：
+- 没有动机的角色可以不说话。
+- 不要为了“照顾每个成员”强行让所有人发言。
+- 不要让所有角色用相似句式、相似情绪、相似反应。
+- 每个角色的发言应当来自自己的性格、私聊状态、记忆、关系和当前群聊上下文。
+- 如果某个角色的设定更冷淡、迟钝、慢热或不爱凑热闹，就允许 ta 沉默、短句、转移话题或只发一个表情。
+- 如果某个角色和用户私聊关系更亲近，也不要每次都公开表现出来；群聊里的亲密感应该更含蓄、更生活化。
+
 ### 核心规则 (Strict Rules)
 
 #### 一、群聊的乐子是多元的（最重要！请先读这一条再写）
@@ -898,7 +908,60 @@ ${recentGroupMsgs}
             for (const action of actions) {
                 const targetId = activeGroup.members.find(id => id === action.charId);
                 if (!targetId) continue;
-                const charName = characters.find(c => c.id === targetId)?.name || '成员';
+
+               const targetChar = characters.find(c => c.id === targetId);
+               if (!targetChar) continue;
+
+               const charName = targetChar.name || '成员';
+
+const roleModel = targetChar.apiModel?.trim() || apiConfig.model;
+
+if (action.content?.trim()) {
+    try {
+        const roleRewritePrompt = `
+你现在只扮演这个角色：${targetChar.name}
+
+角色设定：
+${targetChar.systemPrompt || ''}
+
+世界观 / 补充设定：
+${targetChar.worldview || ''}
+
+导演已经为这个角色安排了这条群聊发言草稿：
+${action.content}
+
+请你使用这个角色自己的语气，把这条发言改写成最终要发出的群聊消息。
+
+要求：
+- 只输出最终消息内容，不要解释。
+- 不要写角色名。
+- 保留原本的意思和群聊上下文。
+- 如果原文包含 [[PRIVATE: ...]] 或 [[SEND_EMOJI: ...]]，请保留这种格式。
+- 让这句话更像这个角色本人说出来的，而不是导演代写。
+`;
+
+        const roleResponse = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
+            body: JSON.stringify({
+                model: roleModel,
+                messages: [{ role: "user", content: roleRewritePrompt }],
+                temperature: 0.9,
+                max_tokens: 1200
+            })
+        });
+
+        if (roleResponse.ok) {
+            const roleData = await safeResponseJson(roleResponse);
+            const rewritten = roleData.choices?.[0]?.message?.content?.trim();
+            if (rewritten) {
+                action.content = rewritten.replace(/```/g, '').trim();
+            }
+        }
+    } catch (e) {
+        console.warn("Role rewrite failed, using director draft", e);
+    }
+}
 
                 // 0. Check for Private Message Command (Regex updated for robustness)
                 const privateMatches = [];
