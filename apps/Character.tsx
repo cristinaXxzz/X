@@ -1061,13 +1061,25 @@ ${isInitialGeneration ? `
 
                            <div>
                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">世界观 / 设定补充 (Worldview & Lore)</label>
-                               <textarea 
-                                    value={formData.worldview || ''} 
-                                    onChange={(e) => handleChange('worldview', e.target.value)} 
-                                    className="w-full h-24 bg-white rounded-3xl p-5 text-sm shadow-sm resize-none focus:ring-1 focus:ring-primary/20 transition-all" 
-                                    placeholder="在这个世界里，魔法是存在的..." 
-                                />
-                           </div>
+                              <textarea 
+                                       value={formData.worldview || ''} 
+                                       onChange={(e) => handleChange('worldview', e.target.value)} 
+                                       className="w-full h-24 bg-white rounded-3xl p-5 text-sm shadow-sm resize-none focus:ring-1 focus:ring-primary/20 transition-all" 
+                                       placeholder="在这个世界里，魔法是存在的..." 
+                                  />
+                          </div>
+
+                          <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
+                                         角色独立模型 (Model Override)
+                                  </label>
+                                  <input
+                                          value={formData.apiModel || ''}
+                                          onChange={(e) => handleChange('apiModel', e.target.value)}
+                                          className="w-full bg-white rounded-3xl p-5 text-sm shadow-sm focus:ring-1 focus:ring-primary/20 transition-all"
+                                          placeholder="留空则使用全局模型，例如 gpt-4o-mini"
+                                     />
+                             </div>
 
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-3">
                                <div className="flex items-center justify-between">

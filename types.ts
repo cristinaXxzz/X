@@ -882,6 +882,9 @@ export interface CharacterProfile {
   activeMemoryMonths?: string[];
   
   writerPersona?: string;
+  apiModel?: string; // 角色独立模型；留空则使用全局 API 配置里的 model
+  apiTemperature?: number; // 可选：角色独立温度
+  apiMaxTokens?: number; // 可选：角色独立最大输出
   writerPersonaGeneratedAt?: number;
 
   mountedWorldbooks?: { id: string; title: string; content: string; category?: string }[];

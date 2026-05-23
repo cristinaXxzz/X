@@ -625,8 +625,14 @@ export const useChatAI = ({
         onInstantPosted?: () => void,
     ) => {
         if (isTyping || !char) return;
-        const effectiveApi = overrideApiConfig || apiConfig;
-        if (!effectiveApi.baseUrl) { alert("请先在设置中配置 API URL"); return; }
+        const effectiveApi = overrideApiConfig || {
+                ...apiConfig,
+                model: char.apiModel?.trim() || apiConfig.model,
+};        
+       if (!effectiveApi.baseUrl) { 
+         alert("请先在设置中配置 API URL"); 
+         return; 
+}
 
         setIsTyping(true);
         setRecallStatus('');

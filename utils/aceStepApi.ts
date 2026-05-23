@@ -307,7 +307,7 @@ ${trimmed ? '⚠️ 再次提醒: 用户 hint 里写明的具体音乐元素 (vo
       'Authorization': `Bearer ${apiConfig.apiKey}`,
     },
     body: JSON.stringify({
-      model: apiConfig.model,
+      model: collaborator?.apiModel?.trim() || apiConfig.model,
       messages: [
         { role: 'system', content: sysPrompt },
         { role: 'user', content: userPrompt },
