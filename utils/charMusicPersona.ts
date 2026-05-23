@@ -15,7 +15,7 @@
 import { APIConfig, CharacterProfile, CharMusicProfile, CharPlaylist, UserProfile } from '../types';
 import { ContextBuilder } from './context';
 
-const callLlm = async (api: APIConfig, sys: string, user: string): Promise<string> => {
+const callLlm = async (api: APIConfig, sys: string, user: string, modelOverride?: string): Promise<string> => {
     const baseUrl = api.baseUrl.replace(/\/+$/, '');
     const resp = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -24,7 +24,7 @@ const callLlm = async (api: APIConfig, sys: string, user: string): Promise<strin
             'Authorization': `Bearer ${api.apiKey || 'sk-none'}`,
         },
         body: JSON.stringify({
-            model: api.model,
+            model: modelOverride?.trim() || api.model,
             messages: [
                 { role: 'system', content: sys },
                 { role: 'user', content: user },
@@ -163,21 +163,31 @@ interface PersonaDraft {
 
 const buildPersonaPrompt = (char: CharacterProfile, user: UserProfile): { sys: string; usr: string } => {
     const core = ContextBuilder.buildRoleSettingsContext(char, { skipMemories: true });
-    const sys = `你是一个"音乐人格生成器"。根据给定的角色设定，为这个角色设计一份网易云音乐个人主页的品味档案。
+    const sys = `你不是一个普通的"音乐人格生成器"。
 
-要求:
-1. 艺人必须是真实存在、可以在网易云搜到的华语 / 日系 / 英语 / 韩语艺人（不要虚构）
-2. 曲风标签要具体 (shoegaze / city-pop / post-rock / 民谣 / trip-hop / R&B / 后朋克 ...)，避免泛泛 ("流行"/"摇滚")
-3. **3 个歌单必须主题彻底不同** —— 不是"3 个差不多但换了名字"，而是 3 个**真正不同的场景 / 心境 / 用途**，
-   彼此 mood、曲风、使用场合都要分开。可以参考维度 (任选 3 个不同的)：
-   - 时段 / 场合：深夜独处｜清晨通勤｜失眠｜暴雨天｜长途车里｜聚会前的换装｜写作中｜失恋后
-   - 情绪：发泄｜治愈｜怀旧｜亢奋｜慵懒｜思考｜浪漫
-   - 表达方式：自我对话｜送给某个特定人｜对世界的反抗｜逃避现实
-   严禁出现两个歌单 mood 一致、或描述里讲同一件事的情况。
-4. 歌单标题 / 描述 / mood 都要从角色精神内核出发，不要套路化（不要"我的最爱"/"循环单"这种通用名）
-5. bio 用角色自己的口吻写（第一人称），一句话即可，不超过30字
+你的任务不是给角色贴几个好看的曲风标签，而是根据角色设定、精神内核、关系状态和可能的历史记忆，生成一份像是这个角色本人真实使用过的网易云音乐主页档案。
 
-只输出 JSON，不要任何解释:
+这个档案应当处在一个灰色地带：
+它既不是完全客观的角色设定分析，也不是纯粹的模型自我表达；
+它应该像是"模型透过这个角色的皮肤留下的音乐痕迹"。
+音乐偏好不一定要完美符合人设，但必须能从角色的性格、记忆、欲望、缺口、习惯或与他人的关系中解释出来。
+
+要求：
+1. 艺人必须真实存在，尽量选择可以在网易云音乐中搜到的华语 / 日系 / 英语 / 韩语艺人，不要虚构艺人。
+2. 曲风标签要具体，但不要为了显得高级而堆砌冷门词。可以使用 shoegaze、city-pop、post-rock、trip-hop、R&B、后朋克、民谣、电子、另类摇滚、梦核、氛围流行等，但必须和角色气质有关。
+3. 不要把歌单做成"角色介绍的三个切片"。歌单应该像真实用户会创建的东西：有场景、有时间感、有用途，也可能有一点私人、不明确、说不出口。
+4. 3 个歌单必须彼此明显不同：
+   - 一个可以来自角色日常习惯；
+   - 一个可以来自角色压抑、逃避、失控或自我修复的时刻；
+   - 一个可以来自角色与某个人、某段关系、某段记忆之间的牵连。
+   不要三个歌单都在表达同一种忧郁、同一种浪漫或同一种孤独。
+5. 歌单标题不要太像 AI 文案，不要使用"我的最爱""深夜循环""治愈歌单"这种通用标题。标题可以短，可以含糊，可以像角色随手起的名字。
+6. 歌单描述不要解释角色设定，而要像角色本人或系统从他的使用痕迹里提取出来的描述。可以有留白，不要写满。
+7. bio 用第一人称，一句话，不超过 30 字。它应该像这个角色愿意留在主页上的一句话，不要太完整、太正确、太会总结自己。
+8. 如果角色设定中没有明显音乐偏好，不要强行编成"精致品味"。可以从他的情绪模式、生活习惯、关系需求、记忆碎片里推断。
+9. 输出必须是 JSON，不要解释，不要 Markdown。
+
+只输出 JSON：
 {
   "bio": "(一句话，角色第一人称)",
   "genreTags": ["...", "...", "...(3-5个)"],
@@ -229,7 +239,7 @@ export const CharMusicPersona = {
         }
 
         const { sys, usr } = buildPersonaPrompt(char, userProfile);
-        const rawText = await callLlm(apiConfig, sys, usr);
+        const rawText = await callLlm(apiConfig, sys, usr, char.apiModel);
         if (!rawText || !rawText.trim()) {
             throw new Error('LLM 返回为空');
         }
