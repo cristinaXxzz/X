@@ -3,6 +3,7 @@ import React from 'react';
 import { OSProvider } from './context/OSContext';
 import { MusicProvider } from './context/MusicContext';
 import PhoneShell from './components/PhoneShell';
+import DesktopShell from './components/DesktopShell';
 import BuildBadge from './components/BuildBadge';
 import { isIOSStandaloneWebApp } from './utils/iosStandalone';
 
@@ -26,9 +27,15 @@ const App: React.FC = () => {
           style={{ transform: 'translateZ(0)' }}
         >
           <OSProvider>
-            <MusicProvider>
-              <PhoneShell />
-            </MusicProvider>
+               <MusicProvider>
+                    <div className="block lg:hidden w-full h-full">
+                        <PhoneShell />
+                    </div>
+
+                    <div className="hidden lg:block w-full h-full">
+                        <DesktopShell />
+                     </div>
+               </MusicProvider>
           </OSProvider>
         </div>
       </div>
