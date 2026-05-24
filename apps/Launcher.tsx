@@ -29,9 +29,9 @@ const DesktopClock = React.memo(() => {
         : 'Good Evening';
 
     return (
-        <div className="flex flex-col mb-4 mt-5 relative animate-fade-in" style={{ color: contentColor }}>
+        <div className="flex flex-col mb-3 mt-2 relative animate-fade-in" style={{ color: contentColor }}>
             {/* 顶部装饰 — 状态胶囊 + 细线 */}
-            <div className="flex items-center gap-2 mb-3 opacity-90">
+            <div className="flex items-center gap-2 mb-2 opacity-90">
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
                     style={{
                         background: 'rgba(255,255,255,0.28)',
@@ -45,14 +45,14 @@ const DesktopClock = React.memo(() => {
             </div>
 
             {/* 问候 */}
-            <div className="text-[11px] tracking-[0.25em] uppercase opacity-55 font-semibold mb-1">
+            <div className="text-[10px] tracking-[0.24em] uppercase opacity-55 font-semibold mb-1">
                 {greeting}
             </div>
 
             {/* 主时钟 */}
-            <div className="flex items-end gap-4">
+            <div className="flex items-end gap-3">
                 <div className="relative">
-                    <div className="text-[6.25rem] leading-[0.82] font-black tracking-tighter drop-shadow-2xl"
+                    <div className="text-[4.4rem] leading-[0.86] font-black tracking-tighter drop-shadow-2xl"
                         style={{ fontFamily: `'Space Grotesk', 'SF Pro Display', sans-serif`, fontFeatureSettings: '"tnum"' }}>
                         <span>{virtualTime.hours.toString().padStart(2, '0')}</span>
                         <span className="opacity-35 font-thin mx-0.5 animate-pulse">:</span>
@@ -63,7 +63,7 @@ const DesktopClock = React.memo(() => {
                         style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.4), transparent 70%)' }} />
                 </div>
 
-                <div className="flex flex-col justify-end pb-2.5 gap-0.5">
+                <div className="flex flex-col justify-end pb-2 gap-0.5">
                     <div className="text-[10px] font-bold tracking-[0.22em] opacity-85">{dayName}</div>
                     <div className="flex items-baseline gap-1">
                         <div className="text-2xl font-black leading-none" style={{ fontFamily: `'Space Grotesk', sans-serif` }}>{dateNum}</div>
@@ -182,6 +182,43 @@ const AppGridPage = React.memo(({
         </div>
     );
 });
+
+const QuickAccess = React.memo(({
+    apps,
+    openApp,
+    contentColor,
+}: {
+    apps: typeof INSTALLED_APPS,
+    openApp: (id: AppID) => void,
+    contentColor: string,
+}) => (
+    <div className="mb-4 animate-fade-in">
+        <div className="mb-2 flex items-center justify-between" style={{ color: contentColor }}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.24em] opacity-60">Quick Access</div>
+            <div className="text-[9px] uppercase tracking-[0.2em] opacity-35">常用</div>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+            {apps.map(app => (
+                <div
+                    key={app.id}
+                    className="min-w-0 rounded-3xl px-2 py-3 text-center"
+                    style={{
+                        background: 'rgba(255,255,255,0.18)',
+                        border: '1px solid rgba(255,255,255,0.16)',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)',
+                    }}
+                >
+                    <div className="flex justify-center">
+                        <AppIcon app={app} onClick={() => openApp(app.id)} size="sm" hideLabel />
+                    </div>
+                    <div className="mt-2 truncate text-[10px] font-bold" style={{ color: contentColor }}>
+                        {app.name}
+                    </div>
+                </div>
+            ))}
+        </div>
+    </div>
+));
 
 // 3b. Small 2x2 app grid for pinwheel cells
 const AppQuadGrid = React.memo(({ apps, openApp }: { apps: typeof INSTALLED_APPS, openApp: (id: AppID) => void }) => {
@@ -338,6 +375,15 @@ const Launcher: React.FC = () => {
     INSTALLED_APPS.filter(app => !DOCK_APPS.includes(app.id)), 
     []
   );
+
+  const quickApps = useMemo(() => {
+    const ids = [AppID.Chat, AppID.GroupChat, AppID.Music, AppID.Character];
+    return ids
+      .map(id => INSTALLED_APPS.find(app => app.id === id))
+      .filter(Boolean) as typeof INSTALLED_APPS;
+  }, []);
+
+  const quickIds = useMemo(() => new Set(quickApps.map(app => app.id)), [quickApps]);
 
   const dockAppsConfig = useMemo(() => 
     DOCK_APPS.map(id => INSTALLED_APPS.find(app => app.id === id)).filter(Boolean) as typeof INSTALLED_APPS,
@@ -528,11 +574,11 @@ const Launcher: React.FC = () => {
           {appPages.map((pageApps, idx) => (
               <div
                 key={idx}
-                className="w-full flex-shrink-0 snap-center snap-always flex flex-col px-6 pt-12 pb-8 h-full"
+                className="w-full flex-shrink-0 snap-center snap-always flex flex-col px-5 pt-8 pb-8 h-full"
                 style={{ contentVisibility: 'auto', contain: 'layout paint', transform: 'translateZ(0)' }}
               >
                   {idx === 0 ? (
-                      // Page 1 (original): Clock + Chat + 4x2 App Grid
+                      // Page 1: compact status + character + quick access + app grid
                       <>
                         <DesktopClock />
                         <CharacterWidget
@@ -542,8 +588,9 @@ const Launcher: React.FC = () => {
                             onClick={() => openApp(AppID.Chat)}
                             contentColor={contentColor}
                         />
-                        <div className="flex-1">
-                            <AppGridPage apps={pageApps} openApp={openApp} />
+                        <QuickAccess apps={quickApps} openApp={openApp} contentColor={contentColor} />
+                        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar ios-scroll pb-2">
+                            <AppGridPage apps={pageApps.filter(app => !quickIds.has(app.id)).slice(0, 8)} openApp={openApp} />
                         </div>
                       </>
                   ) : idx === 1 ? (

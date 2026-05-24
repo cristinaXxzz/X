@@ -91,14 +91,14 @@ export const MizuHeader: React.FC<{
   onClose?: () => void;
   right?: React.ReactNode;
 }> = ({ title, onBack, onClose, right }) => (
-  <div className="flex items-center justify-between px-4 h-12 shrink-0 shizuku-glass-strong relative z-20"
+  <div className="flex items-center justify-between px-3 h-14 shrink-0 shizuku-glass-strong relative z-20"
     style={{ borderBottom: `1px solid rgba(255,255,255,0.3)` }}>
     <button
-      className="w-8 h-8 flex items-center justify-center rounded-full transition-all"
+      className="tap-target -ml-1 rounded-full transition-all active:scale-95"
       style={{ color: C.primary }}
       onClick={onBack || onClose}
     >
-      {onBack ? <ArrowLeft size={16} weight="bold" /> : <X size={16} weight="bold" />}
+      {onBack ? <ArrowLeft size={18} weight="bold" /> : <X size={18} weight="bold" />}
     </button>
     <div className="flex items-center gap-2">
       <Sparkle size={7} delay={0} />
@@ -107,7 +107,7 @@ export const MizuHeader: React.FC<{
       <WaterDrop size={5} />
       <Sparkle size={7} delay={1.2} />
     </div>
-    <div className="w-8 flex justify-end">{right}</div>
+    <div className="min-w-11 flex justify-end">{right}</div>
   </div>
 );
 

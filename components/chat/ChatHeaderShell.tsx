@@ -347,13 +347,13 @@ const ChatHeaderShell: React.FC<ChatHeaderShellProps> = ({
         <div className={`${headerDensityClass} flex ${useCenteredLayout ? 'items-center' : 'items-end'} shrink-0 z-30 sticky top-0 relative ${headerToneClass}`}>
             {selectionMode ? (
                 <div className="flex items-center justify-between w-full">
-                    <button onClick={onCancelSelection} className={`text-sm font-bold px-2 py-1 ${secondaryTextClass}`}>取消</button>
+                    <button onClick={onCancelSelection} className={`tap-target text-sm font-bold px-3 rounded-full ${secondaryTextClass}`}>取消</button>
                     <span className={`text-sm font-bold ${primaryTextClass}`}>已选 {selectedCount} 项</span>
                     <div className="w-10" />
                 </div>
             ) : useCenteredLayout ? (
                 <div className="relative w-full min-h-[56px] flex items-end justify-center">
-                    <button onClick={onClose} className={`absolute left-0 bottom-2 p-2 ${iconButtonClass}`}>
+                    <button onClick={onClose} className={`tap-target absolute left-0 bottom-1 ${iconButtonClass}`}>
                         <CaretLeft className="w-5 h-5" weight="bold" />
                     </button>
 
@@ -366,13 +366,13 @@ const ChatHeaderShell: React.FC<ChatHeaderShellProps> = ({
                         {renderCenteredInfo()}
                     </div>
 
-                    <button onClick={onTriggerAI} className={`absolute right-0 bottom-2 p-2 ${actionButtonClass}`} title="触发 AI">
+                    <button onClick={onTriggerAI} className={`tap-target absolute right-0 bottom-1 ${actionButtonClass}`} title="触发 AI">
                         <Lightning className="w-5 h-5" weight="bold" />
                     </button>
                 </div>
             ) : (
                 <div className="flex items-center gap-3 w-full">
-                    <button onClick={onClose} className={`p-2 -ml-2 ${iconButtonClass}`}>
+                    <button onClick={onClose} className={`tap-target -ml-2 ${iconButtonClass}`}>
                         <CaretLeft className="w-5 h-5" weight="bold" />
                     </button>
 
@@ -380,7 +380,7 @@ const ChatHeaderShell: React.FC<ChatHeaderShellProps> = ({
                         {renderStandardInfo()}
                     </div>
 
-                    <button onClick={onTriggerAI} className={`p-2 ml-auto ${actionButtonClass}`} title="触发 AI">
+                    <button onClick={onTriggerAI} className={`tap-target ml-auto ${actionButtonClass}`} title="触发 AI">
                         <Lightning className="w-5 h-5" weight="bold" />
                     </button>
                 </div>

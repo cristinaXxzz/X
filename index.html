@@ -197,6 +197,20 @@
       .bottom-safe {
         bottom: env(safe-area-inset-bottom);
       }
+      .tap-target {
+        min-width: var(--touch-target-min, 44px);
+        min-height: var(--touch-target-min, 44px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .tap-target-sm {
+        min-width: 40px;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
       .h-app {
         height: var(--app-height, 100lvh);
       }
