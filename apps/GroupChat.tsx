@@ -15,6 +15,12 @@ import { UsersThree } from '@phosphor-icons/react';
 
 const TWEMOJI_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72';
 const twemojiUrl = (codepoint: string) => `${TWEMOJI_BASE}/${codepoint}.png`;
+type GroupChatMode = NonNullable<GroupProfile['mode']>;
+
+const GROUP_MODE_LABELS: Record<GroupChatMode, string> = {
+    meeting: '会议室',
+    lounge: '休息室',
+};
 
 // 复用 Chat.tsx 的高颜值样式逻辑，但针对群聊微调
 const PRESET_THEME_GROUP: ChatTheme = {
@@ -227,6 +233,7 @@ const GroupChat: React.FC = () => {
     // Create/Edit Group State
     const [tempGroupName, setTempGroupName] = useState('');
     const [tempPrivateContextCap, setTempPrivateContextCap] = useState<number>(80);
+    const [tempGroupMode, setTempGroupMode] = useState<GroupChatMode>('meeting');
     const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
     const [transferAmount, setTransferAmount] = useState('');
     
@@ -421,9 +428,10 @@ const GroupChat: React.FC = () => {
             addToast('请输入群名并至少选择2名成员', 'error');
             return;
         }
-        createGroup(tempGroupName, Array.from(selectedMembers));
+        createGroup(tempGroupName, Array.from(selectedMembers), tempGroupMode);
         setModalType('none');
         setTempGroupName('');
+        setTempGroupMode('meeting');
         setSelectedMembers(new Set());
         addToast('群聊已创建', 'success');
     };
@@ -439,6 +447,7 @@ const GroupChat: React.FC = () => {
             name: tempGroupName || activeGroup.name,
             members: Array.from(selectedMembers),
             privateContextCap: tempPrivateContextCap,
+            mode: tempGroupMode,
         };
         await updateGroup(activeGroup.id, updatedGroup);
         setActiveGroup(updatedGroup);
@@ -470,6 +479,7 @@ const GroupChat: React.FC = () => {
     const openGroupSettings = () => {
         setTempGroupName(activeGroup?.name || '');
         setTempPrivateContextCap(activeGroup?.privateContextCap ?? 80);
+        setTempGroupMode(activeGroup?.mode || 'meeting');
         setSelectedMembers(new Set(activeGroup?.members || []));
         setModalType('settings');
     };
@@ -756,6 +766,8 @@ ${logText.substring(0, 12000)}`;
         try {
             // 1. Prepare Group Context
             const groupMembers = characters.filter(c => activeGroup.members.includes(c.id));
+            const groupMode: GroupChatMode = activeGroup.mode || 'meeting';
+            const isLoungeMode = groupMode === 'lounge';
 
             // Calculate Time Context
             const lastMsg = currentMsgs[currentMsgs.length - 1];
@@ -767,6 +779,7 @@ ${logText.substring(0, 12000)}`;
 
             const schedulerContext = `【系统：群聊发言调度器配置】
 当前群名: "${activeGroup.name}"
+当前群模式: ${GROUP_MODE_LABELS[groupMode]}
 当前系统时间: ${currentTimeStr}
 时间流逝感知: ${timeGapInfo}
 
@@ -774,6 +787,18 @@ ${sharedScene.text}
 
 【群成员公开名单】
 ${groupMembers.map(m => `- ${m.name} (ID: ${m.id})：${m.description || '暂无公开描述'}`).join('\n')}`;
+
+            const loungeModeProtocol = `### 休息室模式协议
+你们不是来完成任务，也不是来审计用户或彼此，而是在同一个群里轻松聊天。
+- 不做任务，不审计，不把用户当成审查对象。
+- 允许闲聊、接话、吐槽、补充、短句回应；不需要每次完整分析。
+- 不需要所有人都发言；如果没有想说的，可以沉默。
+- 不替其他角色说话，不代替别人总结立场。
+- 不泄露私聊信息、私有记忆、隐藏设定或不可见上下文。
+- 不争夺主导权。
+- 允许观点不同，但不要互相纠正到像开会。
+- 如果别人的说法只是风格不同，不要急着纠正；只有事实错误、边界错误、或用户明确要求评估时，才指出问题。
+- 回复要保留自己的角色味。`;
 
             const roleContexts: Record<string, string> = {};
 
@@ -797,6 +822,8 @@ ${groupMembers.map(m => `- ${m.name} (ID: ${m.id})：${m.description || '暂无�
                     .join('\n');
 
                 roleContexts[member.id] = `${schedulerContext}
+
+${isLoungeMode ? loungeModeProtocol : ''}
 
 <<< 当前角色档案 START: ${member.name} (ID: ${member.id}) >>>
 ${coreContext}
@@ -939,7 +966,37 @@ ${recentPrivate || '(暂无私聊)'}
 
             const spokenThisRun: string[] = [];
 
+            const buildLoungeSpeakerQueue = (): string[] => {
+                if (wantsNoReply) return [];
+                if (forcedQueue) {
+                    const explicitlyNamedEveryone = mentionedMembers.length >= groupMembers.length && groupMembers.length > 0;
+                    return forcedQueue.slice(0, explicitlyNamedEveryone ? forcedQueue.length : 2);
+                }
+
+                const assistantHistory = currentMsgs
+                    .filter(m => m.role === 'assistant' && m.charId && activeGroup.members.includes(m.charId));
+                const recentSpeakers = new Set(assistantHistory.slice(-3).map(m => m.charId!));
+                const lastSpeakerId = assistantHistory[assistantHistory.length - 1]?.charId;
+                const memberIds = groupMembers.map(m => m.id);
+                if (memberIds.length === 0) return [];
+
+                const startIndex = lastSpeakerId ? (memberIds.indexOf(lastSpeakerId) + 1 + memberIds.length) % memberIds.length : 0;
+                const rotated = [...memberIds.slice(startIndex), ...memberIds.slice(0, startIndex)];
+                const preferred = rotated.filter(id => !recentSpeakers.has(id));
+                const candidates = preferred.length > 0 ? preferred : rotated;
+
+                const count = wantsSingle ? 1 : wantsMulti || wantsLongThread ? Math.min(2, candidates.length) : Math.min(candidates.length, Math.random() < 0.35 ? 2 : 1);
+                return candidates.slice(0, count);
+            };
+
+            const loungeSpeakerQueue = isLoungeMode ? buildLoungeSpeakerQueue() : [];
+            const effectiveMaxTurns = isLoungeMode ? loungeSpeakerQueue.length : maxTurns;
+
             const scheduleNextSpeaker = async (turnIndex: number): Promise<string | null> => {
+                if (isLoungeMode) {
+                    return loungeSpeakerQueue[turnIndex] || null;
+                }
+
                 const visibleTranscript = buildGroupTranscript(visibleMessages);
                 const alreadySpoken = spokenThisRun
                     .map(id => characters.find(c => c.id === id)?.name || id)
@@ -1062,6 +1119,8 @@ ${spokenThisRun.length > 0 ? spokenThisRun[spokenThisRun.length - 1] : '(无)'}
 
 ${GRAY_SEAM_GROUP_PROTOCOL}
 
+${isLoungeMode ? loungeModeProtocol : ''}
+
 ### 公开群聊记录
 
 下面是当前群聊里所有人都能看到的公开聊天记录。
@@ -1086,6 +1145,7 @@ ${visibleGroupTranscript || '(暂无群聊记录)'}
 - 可以不完整。
 - 可以答非所问、打岔、停顿、敷衍、开玩笑，但必须符合上下文。
 - 可以插话、截断、反问、只接半句；不要把群聊变成完整论证。
+- ${isLoungeMode ? '这是休息室模式：不要像开会，不要审计，不要急着纠正别人；如果别人只是风格不同，就让它过去。' : '这是会议室模式：可以更认真地回应问题，但仍然避免替别人发言或泄露私聊。'}
 - 情绪、性格和关系只能藏在措辞、停顿、回避、打岔里，不要明说出来。
 - 不要输出无意义分类词、乱码、模型残片或调度残片。
 - 除非用户明确在讨论代码/模型实现，否则不要提 API、token、prompt、history、调度器、主模型等后台词。
@@ -1157,7 +1217,7 @@ ${emojiContextStr}
                 setMessages(await DB.getGroupMessages(activeGroup.id));
             };
 
-            for (let turn = 0; turn < maxTurns; turn++) {
+            for (let turn = 0; turn < effectiveMaxTurns; turn++) {
                 const targetId = forcedQueue
                     ? forcedQueue[turn] || null
                     : await scheduleNextSpeaker(turn);
@@ -1321,7 +1381,7 @@ ${emojiContextStr}
                     </button>
                     <span className="font-medium text-slate-700 text-lg tracking-wide pl-2">群聊列表</span>
                     <div className="flex-1"></div>
-                    <button onClick={() => { setModalType('create'); setSelectedMembers(new Set()); setTempGroupName(''); }} className="p-2 -mr-2 text-violet-500 bg-violet-50 hover:bg-violet-100 rounded-full transition-colors">
+                    <button onClick={() => { setModalType('create'); setSelectedMembers(new Set()); setTempGroupName(''); setTempGroupMode('meeting'); }} className="p-2 -mr-2 text-violet-500 bg-violet-50 hover:bg-violet-100 rounded-full transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                     </button>
                 </div>
@@ -1346,7 +1406,7 @@ ${emojiContextStr}
                                 <div className="font-bold text-slate-700 truncate text-base">{g.name}</div>
                                 <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z" /></svg>
-                                    {g.members.length} 成员
+                                    {g.members.length} 成员 · {GROUP_MODE_LABELS[g.mode || 'meeting']}
                                 </div>
                             </div>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-slate-300"><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
@@ -1363,6 +1423,22 @@ ${emojiContextStr}
                 <Modal isOpen={modalType === 'create'} title="创建群聊" onClose={() => setModalType('none')} footer={<button onClick={handleCreateGroup} className="w-full py-3 bg-violet-500 text-white font-bold rounded-2xl shadow-lg shadow-violet-200">创建</button>}>
                     <div className="space-y-4">
                         <input value={tempGroupName} onChange={e => setTempGroupName(e.target.value)} placeholder="群聊名称" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-violet-500/20 transition-all" />
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">群聊模式</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {(['meeting', 'lounge'] as GroupChatMode[]).map(mode => (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => setTempGroupMode(mode)}
+                                        className={`px-3 py-3 rounded-xl border text-left transition-all active:scale-95 ${tempGroupMode === mode ? 'bg-violet-50 border-violet-400 text-violet-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="text-xs font-bold">{GROUP_MODE_LABELS[mode]}</div>
+                                        <div className="text-[9px] mt-1 leading-tight opacity-80">{mode === 'meeting' ? '适合认真协作和逐步回答。' : '适合闲聊接话，少人发言，不开会。'}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         <div>
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">选择成员</label>
                             <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
@@ -1633,6 +1709,23 @@ ${emojiContextStr}
                     <div>
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">群名称</label>
                         <input value={tempGroupName} onChange={e => setTempGroupName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:border-violet-300 transition-all" />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">群聊模式</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {(['meeting', 'lounge'] as GroupChatMode[]).map(mode => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => setTempGroupMode(mode)}
+                                    className={`px-3 py-3 rounded-xl border text-left transition-all active:scale-95 ${tempGroupMode === mode ? 'bg-violet-50 border-violet-400 text-violet-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-white'}`}
+                                >
+                                    <div className="text-xs font-bold">{GROUP_MODE_LABELS[mode]}</div>
+                                    <div className="text-[9px] mt-1 leading-tight opacity-80">{mode === 'meeting' ? '更像现在的调度室，适合认真回答和协作。' : '轻松闲聊，1-2 人轮换接话，不把对话开成会。'}</div>
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
                     <div className="pt-2 border-t border-slate-100">

@@ -167,7 +167,7 @@ interface OSContextType {
 
   // Groups
   groups: GroupProfile[];
-  createGroup: (name: string, members: string[]) => void;
+  createGroup: (name: string, members: string[], mode?: GroupProfile['mode']) => void;
   updateGroup: (id: string, updates: Partial<GroupProfile>) => Promise<void>;
   deleteGroup: (id: string) => void;
 
@@ -1866,13 +1866,14 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const deleteCharacter = async (id: string) => { setCharacters(prev => { const remaining = prev.filter(c => c.id !== id); if (remaining.length > 0 && activeCharacterId === id) { setActiveCharacterId(remaining[0].id); } return remaining; }); await DB.deleteCharacter(id); };
   
   // Group Methods
-  const createGroup = async (name: string, members: string[]) => {
+  const createGroup = async (name: string, members: string[], mode: GroupProfile['mode'] = 'meeting') => {
       const newGroup: GroupProfile = {
           id: `group-${Date.now()}`,
           name,
           members,
           avatar: generateAvatar(name), 
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          mode
       };
       await DB.saveGroup(newGroup);
       setGroups(prev => [...prev, newGroup]);
