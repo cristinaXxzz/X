@@ -354,7 +354,7 @@ const Character: React.FC = () => {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
               body: JSON.stringify({
-                  model: apiConfig.model,
+                  model: formData?.apiModel?.trim() || apiConfig.model,
                   messages: [
                       { role: 'system', content: systemContent },
                       { role: 'user', content: userContent },
@@ -437,7 +437,7 @@ const Character: React.FC = () => {
           const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
-              body: JSON.stringify({ model: apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.5, max_tokens: 8000, stream: false }),
+              body: JSON.stringify({ model: formData?.apiModel?.trim() || apiConfig.model, messages: [{ role: 'user', content: prompt }], temperature: 0.5, max_tokens: 8000, stream: false }),
           });
           if (!response.ok) throw new Error(`API ${response.status}`);
           const data = await safeResponseJson(response);
@@ -499,7 +499,7 @@ const Character: React.FC = () => {
       
       try { 
           const prompt = `Task: Convert this text log into a JSON array. Format: [{ "date": "YYYY-MM-DD", "summary": "...", "mood": "..." }] Text: ${importText.substring(0, 8000)}`; 
-          const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` }, body: JSON.stringify({ model: apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.1 }) }); 
+          const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` }, body: JSON.stringify({ model: formData?.apiModel?.trim() || apiConfig.model, messages: [{ role: "user", content: prompt }], temperature: 0.1 }) }); 
           if (!response.ok) throw new Error(`HTTP Error: ${response.status}`); 
           const data = await safeResponseJson(response); 
           let content = data.choices?.[0]?.message?.content || ''; 
@@ -581,7 +581,7 @@ const Character: React.FC = () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
                     body: JSON.stringify({
-                        model: apiConfig.model,
+                        model: formData?.apiModel?.trim() || apiConfig.model,
                         messages: [{ role: "user", content: prompt }],
                         max_tokens: 8000, 
                         temperature: 0.5
@@ -763,7 +763,7 @@ ${isInitialGeneration ? `
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
               body: JSON.stringify({
-                  model: apiConfig.model,
+                  model: formData?.apiModel?.trim() || apiConfig.model,
                   messages: [{ role: "user", content: prompt }],
                   max_tokens: 8000, 
                   temperature: 0.5
@@ -1061,25 +1061,25 @@ ${isInitialGeneration ? `
 
                            <div>
                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">世界观 / 设定补充 (Worldview & Lore)</label>
-                              <textarea 
-                                       value={formData.worldview || ''} 
-                                       onChange={(e) => handleChange('worldview', e.target.value)} 
-                                       className="w-full h-24 bg-white rounded-3xl p-5 text-sm shadow-sm resize-none focus:ring-1 focus:ring-primary/20 transition-all" 
-                                       placeholder="在这个世界里，魔法是存在的..." 
-                                  />
-                          </div>
+                               <textarea 
+                                    value={formData.worldview || ''} 
+                                    onChange={(e) => handleChange('worldview', e.target.value)} 
+                                    className="w-full h-24 bg-white rounded-3xl p-5 text-sm shadow-sm resize-none focus:ring-1 focus:ring-primary/20 transition-all" 
+                                    placeholder="在这个世界里，魔法是存在的..." 
+                                />
+                           </div>
 
-                          <div>
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
-                                         角色独立模型 (Model Override)
-                                  </label>
-                                  <input
-                                          value={formData.apiModel || ''}
-                                          onChange={(e) => handleChange('apiModel', e.target.value)}
-                                          className="w-full bg-white rounded-3xl p-5 text-sm shadow-sm focus:ring-1 focus:ring-primary/20 transition-all"
-                                          placeholder="留空则使用全局模型，例如 gpt-4o-mini"
-                                     />
-                             </div>
+                           <div>
+                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
+                                   角色独立模型 (Model Override)
+                               </label>
+                               <input
+                                   value={formData.apiModel || ''}
+                                   onChange={(e) => handleChange('apiModel', e.target.value)}
+                                   className="w-full bg-white rounded-3xl p-5 text-sm shadow-sm focus:ring-1 focus:ring-primary/20 transition-all"
+                                   placeholder="留空则使用全局模型，例如 gpt-4o-mini"
+                               />
+                           </div>
 
                            <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-3">
                                <div className="flex items-center justify-between">
