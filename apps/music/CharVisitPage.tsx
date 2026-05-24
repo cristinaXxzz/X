@@ -54,7 +54,7 @@ const toPlaylistSong = (s: Song): CharPlaylistSong => ({
 const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
   const { characters, updateCharacter, userProfile, apiConfig, addToast } = useOS();
   const {
-    cfg, playSong,
+    cfg, profile: neteaseProfile, playSong,
     current, playing, togglePlay, nextSong, prevSong,
   } = useMusic();
   const char = useMemo(() => characters.find(c => c.id === charId), [characters, charId]);
@@ -132,11 +132,10 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
     setExpandedPl(prev => (prev === plId ? null : plId));
   };
 
-  /** 让 char 用偏爱艺人作为关键词去搜歌 → 自动填充空歌单
-   *  关键：每个歌单走一组**不同**的关键词，否则三个歌单会搜出一模一样的歌。
-   *  - 用歌单自己的 title / mood 作为主关键词（区别度最高）
-   *  - 再按歌单 index 旋转 signatureArtists 取一段，保证不同歌单艺人不重叠
-   *  - 还要去掉本角色其它歌单已经有的歌，避免跨歌单撞曲
+  /** 让 char 沿着自己的隐藏搜索路线填歌单。
+   *  LLM 只生成 searchQueries / selectionBias，不直接编歌名；网易云负责现实校验。
+   *  这里先攒候选池，再按跨歌单去重、艺人/专辑多样性和搜索来源打分挑歌，
+   *  避免三张歌单都吃到同一批热门结果。
    */
   const fillPlaylistFromTaste = useCallback(async (pl: CharPlaylist) => {
     if (!char || !profile || fillingPl) return;
@@ -162,14 +161,20 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
       };
 
       const keywords: string[] = [];
-      // 1) 歌单自己的 title 直接当关键词 — 这是最能拉开差异的一项
+      // 1) 新版音乐人格给的隐藏搜索路线优先
+      if (Array.isArray(pl.searchQueries)) keywords.push(...pl.searchQueries);
+      // 2) 歌单自己的 title 作为补充
       const cleanTitle = (pl.title || '').trim();
       if (cleanTitle && !/^歌单\s*\d*$/.test(cleanTitle)) keywords.push(cleanTitle);
-      // 2) mood → 中文搜索词
+      // 3) mood → 中文搜索词
       if (pl.mood && moodKeywordMap[pl.mood]) keywords.push(moodKeywordMap[pl.mood]);
-      // 3) 旋转后的艺人（每歌单 2 个，错开起点）
-      keywords.push(...rotate(allArtists, plIndex * 2, 2));
-      // 4) 没艺人就用旋转后的曲风兜底
+      // 4) 旋转后的艺人：作为人气锚点，避免整张歌单被抽象 query 带得太冷
+      const anchorArtists = rotate(allArtists, plIndex * 2, 3);
+      keywords.push(...anchorArtists);
+      if (pl.mood && moodKeywordMap[pl.mood]) {
+        keywords.push(...anchorArtists.slice(0, 2).map(a => `${a} ${moodKeywordMap[pl.mood!]}`));
+      }
+      // 5) 没艺人就用旋转后的曲风兜底
       if (allArtists.length === 0) keywords.push(...rotate(allGenres, plIndex, 2));
 
       // 去重 + 去空
@@ -186,20 +191,132 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
         for (const s of other.songs) usedInOthers.add(s.id);
       }
 
-      const picked: CharPlaylistSong[] = [];
-      const seen = new Set<number>();
-      for (const kw of uniqKeywords) {
-        if (picked.length >= 8) break;
+      type Candidate = Song & { score: number; firstQueryIdx: number; hitCount: number };
+      const candidates = new Map<number, Candidate>();
+      const userCandidates = new Map<number, Candidate>();
+      const currentIds = new Set(pl.songs.map(s => s.id));
+      const scoreSong = (s: Song, qi: number, rank: number, sourceBonus = 0): Candidate => {
+        const baseScore = 100 - qi * 3 - rank * 3;
+        const artistNames = (s.artists || '').split('/').map(a => a.trim()).filter(Boolean);
+        const signatureHit = artistNames.some(a => allArtists.some(sa => sa === a));
+        const genreHit = allGenres.some(g => `${s.name} ${s.album} ${s.artists}`.includes(g));
+        const anchorHit = artistNames.some(a => anchorArtists.includes(a));
+        return {
+          ...s,
+          score: baseScore + sourceBonus + (anchorHit ? 24 : 0) + (signatureHit ? 12 : 0) + (genreHit ? 5 : 0) + Math.random() * 5,
+          firstQueryIdx: qi,
+          hitCount: 1,
+        };
+      };
+
+      for (let qi = 0; qi < uniqKeywords.length; qi++) {
+        const kw = uniqKeywords[qi];
         try {
           const r = await musicApi.search(cfg, kw);
-          const songs: Song[] = (r?.result?.songs || []).slice(0, 4).map(songFromSearch);
-          for (const s of songs) {
-            if (seen.has(s.id) || usedInOthers.has(s.id)) continue;
-            seen.add(s.id);
-            picked.push(toPlaylistSong(s));
-            if (picked.length >= 8) break;
+          const songs: Song[] = (r?.result?.songs || []).slice(0, 10).map(songFromSearch);
+          for (let rank = 0; rank < songs.length; rank++) {
+            const s = songs[rank];
+            if (!s?.id || currentIds.has(s.id) || usedInOthers.has(s.id)) continue;
+            const existed = candidates.get(s.id);
+            if (existed) {
+              existed.score += 12;
+              existed.hitCount += 1;
+              existed.firstQueryIdx = Math.min(existed.firstQueryIdx, qi);
+            } else {
+              candidates.set(s.id, scoreSong(s, qi, rank));
+            }
           }
         } catch { /* 单个关键词失败不阻塞 */ }
+      }
+
+      if ((profile.canReadUserMusic ?? true) && cfg.cookie && neteaseProfile?.userId) {
+        try {
+          const plRes = await musicApi.userPlaylist(cfg, neteaseProfile.userId);
+          const userPlaylists = (plRes?.playlist || [])
+            .filter((p: any) => p?.id && (p.trackCount || 0) > 0)
+            .slice(0, 12);
+          const queryText = `${pl.title} ${pl.description} ${pl.mood || ''} ${uniqKeywords.join(' ')} ${allArtists.join(' ')} ${allGenres.join(' ')}`;
+          const scoredPlaylists = userPlaylists
+            .map((p: any, i: number) => {
+              const name = String(p.name || '');
+              let score = 30 - i;
+              for (const kw of uniqKeywords) if (kw && name.includes(kw)) score += 16;
+              for (const g of allGenres) if (g && name.includes(g)) score += 10;
+              if (pl.mood && moodKeywordMap[pl.mood] && name.includes(moodKeywordMap[pl.mood])) score += 8;
+              if (queryText.includes(name)) score += 4;
+              return { id: p.id, name, score };
+            })
+            .sort((a: any, b: any) => b.score - a.score)
+            .slice(0, 4);
+
+          for (let pi = 0; pi < scoredPlaylists.length; pi++) {
+            const up = scoredPlaylists[pi];
+            const r = await musicApi.playlistTrackAll(cfg, up.id, 40, 0);
+            const songs: Song[] = (r?.songs || []).map(songFromSearch);
+            for (let rank = 0; rank < songs.length; rank++) {
+              const s = songs[rank];
+              if (!s?.id || currentIds.has(s.id) || usedInOthers.has(s.id)) continue;
+              const hay = `${s.name} ${s.album} ${s.artists}`;
+              const artistHit = allArtists.some(a => hay.includes(a));
+              const genreHit = allGenres.some(g => hay.includes(g));
+              const titleHit = cleanTitle && hay.includes(cleanTitle);
+              if (!artistHit && !genreHit && !titleHit && rank > 12) continue;
+              const existed = userCandidates.get(s.id);
+              if (existed) {
+                existed.score += 14;
+                existed.hitCount += 1;
+              } else {
+                userCandidates.set(s.id, scoreSong(s, pi, rank, 32 + (artistHit ? 18 : 0) + (genreHit ? 8 : 0)));
+              }
+            }
+          }
+        } catch { /* 用户歌单读取失败就只用公开搜索结果 */ }
+      }
+
+      const artistUse = new Map<string, number>();
+      const albumUse = new Map<string, number>();
+      const picked: CharPlaylistSong[] = [];
+      const pickedIds = new Set<number>();
+      const canTake = (c: Song, relaxed = false) => {
+        if (pickedIds.has(c.id)) return false;
+        const primaryArtist = (c.artists || '').split('/')[0]?.trim() || c.artists || 'unknown';
+        const album = c.album || 'unknown';
+        if ((artistUse.get(primaryArtist) || 0) >= (relaxed ? 3 : 2)) return false;
+        if (!relaxed && (albumUse.get(album) || 0) >= 1) return false;
+        return true;
+      };
+      const take = (c: Song, source: 'user' | 'discovered') => {
+        const primaryArtist = (c.artists || '').split('/')[0]?.trim() || c.artists || 'unknown';
+        const album = c.album || 'unknown';
+        picked.push({
+          ...toPlaylistSong(c),
+          source,
+          addedAt: Date.now(),
+        });
+        pickedIds.add(c.id);
+        artistUse.set(primaryArtist, (artistUse.get(primaryArtist) || 0) + 1);
+        albumUse.set(album, (albumUse.get(album) || 0) + 1);
+      };
+      for (const c of Array.from(userCandidates.values()).sort((a, b) => b.score - a.score)) {
+        if (picked.length >= 2) break;
+        if (!canTake(c)) continue;
+        take(c, 'user');
+      }
+      const pool = Array.from(candidates.values()).sort((a, b) => b.score - a.score);
+
+      for (const c of pool) {
+        if (picked.length >= 8) break;
+        if (!canTake(c)) continue;
+        take(c, 'discovered');
+      }
+
+      // 如果去重太严格导致数量不足，放宽专辑限制补齐，但仍不拿跨歌单重复歌。
+      if (picked.length < 4) {
+        for (const c of pool) {
+          if (picked.length >= 8) break;
+          if (!canTake(c, true)) continue;
+          take(c, 'discovered');
+        }
       }
 
       if (picked.length === 0) {
@@ -224,7 +341,7 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
     } finally {
       setFillingPl(null);
     }
-  }, [char, profile, cfg, fillingPl, updateCharacter, addToast]);
+  }, [char, profile, cfg, neteaseProfile, fillingPl, updateCharacter, addToast]);
 
   const playPlaylistSong = (pl: CharPlaylist, song: CharPlaylistSong) => {
     // 用 char 歌单作为队列，点击的歌作为起点

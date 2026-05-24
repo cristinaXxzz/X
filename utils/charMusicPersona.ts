@@ -158,7 +158,14 @@ interface PersonaDraft {
     bio: string;
     genreTags: string[];
     signatureArtists: { name: string; artistId?: number }[];
-    playlists: { title: string; description: string; mood?: string; coverStyle?: string }[];
+    playlists: {
+        title: string;
+        description: string;
+        mood?: string;
+        coverStyle?: string;
+        searchQueries?: string[];
+        selectionBias?: string;
+    }[];
 }
 
 const buildPersonaPrompt = (char: CharacterProfile, user: UserProfile): { sys: string; usr: string } => {
@@ -183,9 +190,12 @@ const buildPersonaPrompt = (char: CharacterProfile, user: UserProfile): { sys: s
    不要三个歌单都在表达同一种忧郁、同一种浪漫或同一种孤独。
 5. 歌单标题不要太像 AI 文案，不要使用"我的最爱""深夜循环""治愈歌单"这种通用标题。标题可以短，可以含糊，可以像角色随手起的名字。
 6. 歌单描述不要解释角色设定，而要像角色本人或系统从他的使用痕迹里提取出来的描述。可以有留白，不要写满。
-7. bio 用第一人称，一句话，不超过 30 字。它应该像这个角色愿意留在主页上的一句话，不要太完整、太正确、太会总结自己。
-8. 如果角色设定中没有明显音乐偏好，不要强行编成"精致品味"。可以从他的情绪模式、生活习惯、关系需求、记忆碎片里推断。
-9. 输出必须是 JSON，不要解释，不要 Markdown。
+7. 每个歌单必须给 searchQueries：3-5 个适合在网易云搜索的真实关键词路线。不要只写歌单标题；应该混合"真实艺人/曲风/场景/情绪/语言/年代"，并且三个歌单之间不要高度重复。
+   但不要为了显得特别而故意冷门、晦涩、学术化。至少一半关键词要能搜到相对正常、可听、有人气的结果；可以有一条偏私人的冷一点路线，但不要整张歌单都冷。
+8. 每个歌单必须给 selectionBias：一句不展示给用户的挑歌偏向，说明这张歌单更偏向什么声音/气味/关系痕迹。selectionBias 不要写成抽象哲学句，要能帮助挑歌。
+9. bio 用第一人称，一句话，不超过 30 字。它应该像这个角色愿意留在主页上的一句话，不要太完整、太正确、太会总结自己。
+10. 如果角色设定中没有明显音乐偏好，不要强行编成"精致品味"。可以从他的情绪模式、生活习惯、关系需求、记忆碎片里推断。
+11. 输出必须是 JSON，不要解释，不要 Markdown。
 
 只输出 JSON：
 {
@@ -193,9 +203,9 @@ const buildPersonaPrompt = (char: CharacterProfile, user: UserProfile): { sys: s
   "genreTags": ["...", "...", "...(3-5个)"],
   "signatureArtists": [{"name":"真实艺人名"}, ... (3-6个)],
   "playlists": [
-    {"title":"歌单A(短·独特场景)", "description":"(角色口吻, 1-2句, 说清楚什么时候听 / 为什么)", "mood":"从下面8个里选一个: happy|sad|romantic|angry|chill|epic|nostalgic|dreamy"},
-    {"title":"歌单B(短·和A完全不同的场景/心境)", "description":"...", "mood":"必须和A不同"},
-    {"title":"歌单C(短·和A、B都不同)", "description":"...", "mood":"必须和A、B都不同"}
+    {"title":"歌单A(短·独特场景)", "description":"(角色口吻, 1-2句, 说清楚什么时候听 / 为什么)", "mood":"从下面8个里选一个: happy|sad|romantic|angry|chill|epic|nostalgic|dreamy", "searchQueries":["网易云搜索词1", "搜索词2", "搜索词3"], "selectionBias":"挑歌偏向；不要写给用户看的说明"},
+    {"title":"歌单B(短·和A完全不同的场景/心境)", "description":"...", "mood":"必须和A不同", "searchQueries":["必须和A明显不同", "..."], "selectionBias":"..."},
+    {"title":"歌单C(短·和A、B都不同)", "description":"...", "mood":"必须和A、B都不同", "searchQueries":["必须和A/B明显不同", "..."], "selectionBias":"..."}
   ]
 }`;
 
@@ -283,6 +293,10 @@ export const CharMusicPersona = {
             songs: [],
             mood: (typeof p?.mood === 'string' && ['happy','sad','romantic','angry','chill','epic','nostalgic','dreamy'].includes(p.mood))
                 ? (p.mood as any) : undefined,
+            searchQueries: Array.isArray(p?.searchQueries)
+                ? p.searchQueries.map(sanitizeStr).filter(Boolean).slice(0, 6)
+                : undefined,
+            selectionBias: sanitizeStr(p?.selectionBias) || undefined,
             createdAt: now,
             updatedAt: now,
         }));

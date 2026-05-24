@@ -814,6 +814,10 @@ export interface CharPlaylist {
     coverStyle: string;         // 渐变色标识 or 第一首歌封面
     songs: CharPlaylistSong[];
     mood?: SongMood;
+    /** LLM 生成的隐藏搜索路线：用来真实搜网易云，不直接展示给用户 */
+    searchQueries?: string[];
+    /** 这张歌单挑歌时的私人偏向，用于补充搜索词和未来筛选 */
+    selectionBias?: string;
     createdAt: number;
     updatedAt: number;
 }
