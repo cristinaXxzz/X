@@ -168,6 +168,7 @@ interface OSContextType {
   // Groups
   groups: GroupProfile[];
   createGroup: (name: string, members: string[]) => void;
+  updateGroup: (id: string, updates: Partial<GroupProfile>) => Promise<void>;
   deleteGroup: (id: string) => void;
 
   // User Profile
@@ -1877,6 +1878,15 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
       setGroups(prev => [...prev, newGroup]);
   };
 
+  const updateGroup = async (id: string, updates: Partial<GroupProfile>) => {
+      const existing = groups.find(g => g.id === id);
+      if (!existing) return;
+
+      const updatedGroup: GroupProfile = { ...existing, ...updates };
+      await DB.saveGroup(updatedGroup);
+      setGroups(prev => prev.map(g => g.id === id ? updatedGroup : g));
+  };
+
   const deleteGroup = async (id: string) => {
       await DB.deleteGroup(id);
       setGroups(prev => prev.filter(g => g.id !== id));
@@ -3027,6 +3037,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     deleteSong,
     groups,
     createGroup,
+    updateGroup,
     deleteGroup,
     userProfile,
     updateUserProfile,

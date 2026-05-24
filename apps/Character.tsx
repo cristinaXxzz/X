@@ -419,7 +419,15 @@ const Character: React.FC = () => {
           });
           if (dayMsgs.length === 0) { addToast(`${dateStr} 当天无消息可总结`, 'info'); return; }
 
-          const timeFmt = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          const timeFmt = (ts: number) => {
+              const d = new Date(ts);
+              const y = d.getFullYear();
+              const mo = String(d.getMonth() + 1).padStart(2, '0');
+              const da = String(d.getDate()).padStart(2, '0');
+              const h = String(d.getHours()).padStart(2, '0');
+              const mi = String(d.getMinutes()).padStart(2, '0');
+              return `${y}-${mo}-${da} ${h}:${mi}`;
+          };
           const rawLog = dayMsgs
               .map(m => formatMessageWithTime(m, formData.name, userProfile.name, timeFmt))
               .join('\n');
@@ -564,7 +572,15 @@ const Character: React.FC = () => {
                 setBatchProgress(`Processing ${date} (${i+1}/${dates.length})`);
                 
                 const dayMsgs = msgsByDate[date];
-                const timeFmt = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                const timeFmt = (ts: number) => {
+              const d = new Date(ts);
+              const y = d.getFullYear();
+              const mo = String(d.getMonth() + 1).padStart(2, '0');
+              const da = String(d.getDate()).padStart(2, '0');
+              const h = String(d.getHours()).padStart(2, '0');
+              const mi = String(d.getMinutes()).padStart(2, '0');
+              return `${y}-${mo}-${da} ${h}:${mi}`;
+          };
                 const rawLog = dayMsgs
                     .map(m => formatMessageWithTime(m, formData.name, userProfile.name, timeFmt))
                     .join('\n');
