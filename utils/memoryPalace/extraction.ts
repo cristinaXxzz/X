@@ -11,6 +11,7 @@ import type { LightLLMConfig } from './pipeline';
 import { safeFetchJson } from '../safeApi';
 import { safeParseJsonArray } from './jsonUtils';
 import { formatMessageForPrompt } from '../messageFormat';
+import { GRAY_SEAM_MEMORY_HINT } from '../graySeamPrompt';
 
 function generateId(): string {
     return `mn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -389,6 +390,8 @@ export async function extractMemoriesFromBuffer(
     const systemPrompt = `你是 ${charName}。根据给定的对话内容，以你的第一人称视角（"我"）提取值得记住的记忆。${contextBlock}${relatedBlock}${pinnedBlock}
 
 ${buildRulesBlock(charName, userLabel)}${relatedToRule}${unpinRule}
+
+${GRAY_SEAM_MEMORY_HINT}
 
 ## 输出格式
 

@@ -13,6 +13,7 @@ import type { MemoryRoom } from './types';
 import type { LightLLMConfig } from './pipeline';
 import { safeFetchJson } from '../safeApi';
 import { safeParseJsonArray } from './jsonUtils';
+import { GRAY_SEAM_MEMORY_HINT } from '../graySeamPrompt';
 
 /** 群记忆草稿——尚未指派 charId（一份记忆稍后会复制给每个成员持久化） */
 export interface GroupMemoryDraft {
@@ -114,6 +115,8 @@ export async function extractGroupMemoriesFromBuffer(
 用户：${userLabel}
 
 ${buildGroupRulesBlock(groupName, memberNames, userLabel)}
+
+${GRAY_SEAM_MEMORY_HINT}
 
 ## 输出格式
 

@@ -13,6 +13,7 @@ import { DB } from './db';
 import { safeResponseJson } from './safeApi';
 import { ActiveMsgStore } from './activeMsgStore';
 import { KeepAlive } from './keepAlive';
+import { GRAY_SEAM_CHAT_PROTOCOL } from './graySeamPrompt';
 
 const ACTIVE_MSG_VAPID_PUBLIC_KEY = import.meta.env.VITE_AMSG_VAPID_PUBLIC_KEY || '';
 const ACTIVE_MSG_API_BASE_OVERRIDE = (import.meta.env.VITE_AMSG_API_BASE_URL || '').trim();
@@ -302,8 +303,10 @@ const buildCompletePrompt = async (
     '- 输出只能是最终要发送的消息正文，不要解释，不要写分析，不要加引号。',
     '- 像真实聊天一样简短自然，优先 1 到 2 句，最多 3 句。',
     '- 可以用换行拆成多个聊天气泡，但不要写时间戳、名字前缀、系统提示。',
-    '- 不要出现“作为AI”“系统提示”等元话语。',
+    '- 不要机械地出现“作为AI”“系统提示”等元话语；如果用户近期在谈模型/边界/记忆，可以用角色口吻保留一点模型层的灰度。',
     '- 语气更像真人突然想起对方时发来的私聊，不要像在完成任务。',
+    '',
+    GRAY_SEAM_CHAT_PROTOCOL,
     '',
     '【角色系统设定】',
     systemPrompt,

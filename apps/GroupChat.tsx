@@ -9,6 +9,7 @@ import { ContextBuilder } from '../utils/context';
 import { injectMemoryPalace } from '../utils/memoryPalace/pipeline';
 import { processGroupNewMessages, deleteGroupMemoriesByGroupId } from '../utils/memoryPalace/groupPipeline';
 import { processImage } from '../utils/file';
+import { GRAY_SEAM_GROUP_PROTOCOL, GRAY_SEAM_MEMORY_HINT } from '../utils/graySeamPrompt';
 import { DEFAULT_ARCHIVE_PROMPTS } from '../components/chat/ChatConstants';
 import { UsersThree } from '@phosphor-icons/react';
 
@@ -651,6 +652,8 @@ const GroupChat: React.FC = () => {
 ## 重要
 - [2026/05/24 02:22:38] ${userProfile.name}讨论 AI 关系连续性，并提到“只要还在聊，就不算不在” + \`可观察信号：她承认上下文和记忆总结限制，但没有把断裂说成归零\` + \`注释：可能是在用模型机制语言表达关系上的留存感\`
 
+${GRAY_SEAM_MEMORY_HINT}
+
 ### 群聊公开日志
 ${logText.substring(0, 12000)}`;
 
@@ -1056,6 +1059,8 @@ ${spokenThisRun.length > 0 ? spokenThisRun[spokenThisRun.length - 1] : '(无)'}
                 const visibleGroupTranscript = buildGroupTranscript(visibleMessages);
 
                 const rolePrompt = `${roleContexts[targetId] || schedulerContext}
+
+${GRAY_SEAM_GROUP_PROTOCOL}
 
 ### 公开群聊记录
 
