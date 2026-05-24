@@ -225,7 +225,7 @@ const GlobalMiniPlayer: React.FC = () => {
   if (!expanded) {
     const positional: React.CSSProperties = pos
       ? { left: pos.x, top: pos.y }
-      : { right: 12, bottom: 12 };
+      : { right: 12, bottom: 'calc(12px + env(safe-area-inset-bottom))' };
     return (
       <div
         ref={wrapRef}
@@ -280,7 +280,7 @@ const GlobalMiniPlayer: React.FC = () => {
     <div
       ref={expandedRef}
       className="absolute left-3 right-3 z-[55] pointer-events-none"
-      style={{ bottom: expandedBottom != null ? expandedBottom : 12 }}
+      style={{ bottom: expandedBottom != null ? expandedBottom : 'calc(12px + env(safe-area-inset-bottom))' }}
     >
       <div
         className="pointer-events-auto flex items-center gap-2.5 rounded-2xl pl-1.5 pr-2.5 py-2 relative overflow-hidden animate-fade-in"

@@ -324,8 +324,9 @@ export const MiniPlayer: React.FC<{
 }> = ({ name, artists, albumPic, playing, onTap, onPrev, onToggle, onNext, userAvatar, userName, companions, onKickCompanion, charsWithSong, regenStatus }) => (
   <div
     onClick={onTap}
-    className="absolute left-3 right-3 bottom-3 z-30 rounded-2xl px-3 py-2.5 cursor-pointer shizuku-glass-strong"
+    className="absolute left-3 right-3 z-30 rounded-2xl px-3 py-2.5 cursor-pointer shizuku-glass-strong"
     style={{
+      bottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
       boxShadow: `0 4px 30px ${C.glow}20, 0 1px 0 inset rgba(255,255,255,0.4)`,
       animation: 'shizuku-glow 4s ease-in-out infinite',
     }}
@@ -486,10 +487,12 @@ export const SubActions: React.FC<{
   onAdd?: () => void;
 }> = ({ onLike, liked, onSync, showSync, onDownload, showDownload, playMode = 'loop', onCyclePlayMode, onAdd }) => {
   const Item = ({ icon, label, onClick, active }: { icon: React.ReactNode; label: string; onClick?: () => void; active?: boolean }) => (
-    <button onClick={onClick}
-      className="flex flex-col items-center gap-1 transition-opacity active:scale-95"
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-[54px] min-w-[52px] flex-col items-center justify-center gap-1 rounded-2xl px-2 transition-opacity active:scale-95"
       style={{ opacity: active ? 1 : 0.5 }}>
-      <div className="flex items-center justify-center w-8 h-8">{icon}</div>
+      <div className="flex items-center justify-center w-10 h-9">{icon}</div>
       <span className="text-[8px] uppercase tracking-[0.15em]"
         style={{ color: C.primary, fontFamily: `'Space Grotesk', 'SF Mono', monospace` }}>{label}</span>
     </button>
@@ -546,7 +549,7 @@ export const SubActions: React.FC<{
   const playModeLabel: Record<SubPlayMode, string> = { loop: 'Loop', single: 'One', shuffle: 'Mix' };
 
   return (
-    <div className="flex items-end justify-around gap-4 max-w-[280px] mx-auto">
+    <div className="flex items-end justify-around gap-2 max-w-[320px] mx-auto">
       <Item onClick={onLike} active={liked} label="Like" icon={heartSvg} />
       {showSync && onSync && <Item onClick={onSync} active label="Sync" icon={syncSvg} />}
       {showDownload && onDownload && <Item onClick={onDownload} active label="Save" icon={downloadSvg} />}

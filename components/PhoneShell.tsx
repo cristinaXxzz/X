@@ -448,13 +448,13 @@ const PhoneShell: React.FC = () => {
           REMOVED 'flex flex-col' to fix layout issues in CheckPhone (gap) and SocialApp (jumping).
           Now it acts as a pure container for full-screen apps.
        */}
-      <div 
-  className="absolute inset-0 z-10 w-full h-full overflow-hidden bg-transparent overscroll-none flex flex-col"
-  style={{ 
-      paddingTop: activeApp !== AppID.Launcher ? 'env(safe-area-inset-top)' : 0,
-      paddingBottom: activeApp !== AppID.Launcher ? 'env(safe-area-inset-bottom)' : 0
+      <div
+  className="absolute inset-0 z-10 w-full h-full overflow-hidden bg-transparent overscroll-none flex flex-col px-safe"
+  style={{
+      paddingTop: activeApp !== AppID.Launcher ? 'max(env(safe-area-inset-top), 0px)' : 0,
+      paddingBottom: activeApp !== AppID.Launcher ? 'max(env(safe-area-inset-bottom), 0px)' : 0
   }}
-> 
+>
           {/* App Container */}
          <div className="flex-1 relative overflow-hidden" style={{ contain: useIOSStandaloneLayout ? undefined : 'layout style paint' }}>
     <AppErrorBoundary onCloseApp={closeApp} resetKey={`${activeApp}:${activeCharacterId || 'none'}`}>

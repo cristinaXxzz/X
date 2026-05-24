@@ -1545,7 +1545,7 @@ ${emojiContextStr}
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 no-scrollbar space-y-2 bg-[#f0f4f8]" ref={scrollRef}>
+            <div className="flex-1 overflow-y-auto p-4 no-scrollbar ios-scroll space-y-2 bg-[#f0f4f8]" ref={scrollRef}>
                 {totalMsgCount > messages.length && activeGroup && (
                     <div className="flex justify-center mb-4">
                         <button onClick={async () => {
@@ -1589,7 +1589,7 @@ ${emojiContextStr}
             </div>
 
             {/* Redesigned Input Area (WeChat/iOS Style) */}
-            <div className="bg-[#f0f2f5] border-t border-slate-200 pb-safe shrink-0 z-40 relative">
+            <div className="bg-[#f0f2f5] border-t border-slate-200 keyboard-lift shrink-0 z-40 relative transition-transform duration-200 ease-out" style={{ paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}>
                 {selectionMode ? (
                     <div className="p-3 flex justify-center bg-white">
                         <button 

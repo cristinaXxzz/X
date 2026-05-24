@@ -40,11 +40,13 @@ const isTextEntryElement = (target: EventTarget | null): target is HTMLElement =
 
 const setViewportVars = () => {
     if (typeof document === 'undefined') return;
+    const isiOS = isIOSDevice();
     const shouldStabilizeHeight = isIOSStandaloneWebApp();
     const innerHeight = Math.round(window.innerHeight);
     const viewportHeight = Math.round(window.visualViewport?.height || innerHeight);
     const viewportOffsetTop = Math.round(window.visualViewport?.offsetTop || 0);
-    const bottomSafeInset = shouldStabilizeHeight ? readSafeAreaInset('bottom') : 0;
+    const topSafeInset = isiOS ? readSafeAreaInset('top') : 0;
+    const bottomSafeInset = isiOS ? readSafeAreaInset('bottom') : 0;
     const obscuredHeight = Math.max(0, innerHeight - viewportHeight - viewportOffsetTop);
     const keyboardInset = obscuredHeight > 120 ? obscuredHeight : 0;
     const nextViewportHeight = Math.max(innerHeight, viewportHeight + viewportOffsetTop);
@@ -67,6 +69,7 @@ const setViewportVars = () => {
     document.documentElement.style.setProperty('--app-height', `${fullAppHeight}px`);
     document.documentElement.style.setProperty('--visual-viewport-height', `${viewportHeight}px`);
     document.documentElement.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
+    document.documentElement.style.setProperty('--runtime-safe-area-top', `${topSafeInset}px`);
     document.documentElement.style.setProperty('--standalone-safe-area-bottom', `${bottomSafeInset}px`);
 };
 
@@ -75,7 +78,12 @@ export const installIOSStandaloneWorkaround = () => {
     if (hasInstalledIOSStandaloneWorkaround) return;
 
     hasInstalledIOSStandaloneWorkaround = true;
+    const useIOSFixes = isIOSDevice();
     const useStandaloneFixes = isIOSStandaloneWebApp();
+    if (useIOSFixes) {
+        document.documentElement.classList.add('ios-device');
+        document.body.classList.add('ios-device');
+    }
     if (useStandaloneFixes) {
         document.documentElement.classList.add('ios-standalone');
         document.body.classList.add('ios-standalone');
@@ -115,7 +123,7 @@ export const installIOSStandaloneWorkaround = () => {
     window.addEventListener('resize', handleViewportChange);
     window.visualViewport?.addEventListener('resize', handleViewportChange);
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
-    if (useStandaloneFixes) {
+    if (useIOSFixes) {
         document.addEventListener('focusin', handleFocusIn);
         document.addEventListener('focusout', handleFocusOut);
     }
