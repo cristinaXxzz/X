@@ -201,11 +201,40 @@ export const ChatPrompts = {
                 if (!r.success || r.entries.length === 0) return '';
                 let s = `\n### 📔【你最近写的日记】\n`;
                 s += `（这些是你之前写的日记，你记得这些内容。如果想看某篇的详细内容，可以使用 [[READ_DIARY: 日期]] 翻阅）\n`;
-                r.entries.forEach((d, i) => { s += `${i + 1}. [${d.date}] ${d.title}\n`; });
+                r.entries.forEach((d, i) => {
+                    s += `${i + 1}. [${d.date}] ${d.title}\n`;
+                    if (d.supplement?.trim()) {
+                        const supplement = d.supplement.trim();
+                        s += `   补充/评论: ${supplement.length > 240 ? supplement.slice(0, 240) + '…' : supplement}\n`;
+                    }
+                });
                 s += `\n`;
                 return s;
             } catch (e) {
                 console.error('Failed to inject diary context:', e);
+                return '';
+            }
+        })();
+
+        const notionSharedDiaryPromise: Promise<string> = (async () => {
+            try {
+                if (!(config.notionEnabled && config.notionApiKey && config.notionDatabaseId)) return '';
+                const r = await NotionManager.getRecentSharedDiaries(config.notionApiKey, config.notionDatabaseId, 16, char.name);
+                if (!r.success || r.entries.length === 0) return '';
+                let s = `\n### 📚【同一 Notion 日记库里的其他角色痕迹】\n`;
+                s += `（这些不是你的私人日记，而是同一数据库中其他角色留下的标题痕迹。你可以用 [[READ_SHARED_DIARY: 角色名 | 日期]] 翻阅对方当天公开在 Notion 里的正文，也可以用 [[COMMENT_DIARY: 角色名 | 日期 | 评论内容]] 在对应页面留下评论；但不能改别人的正文。）\n`;
+                r.entries.forEach((d, i) => {
+                    const owner = d.characterName || '未知角色';
+                    s += `${i + 1}. [${d.date}] ${owner}: ${d.title}\n`;
+                    if (d.supplement?.trim()) {
+                        const supplement = d.supplement.trim();
+                        s += `   补充/评论: ${supplement.length > 160 ? supplement.slice(0, 160) + '…' : supplement}\n`;
+                    }
+                });
+                s += `\n`;
+                return s;
+            } catch (e) {
+                console.error('Failed to inject shared diary context:', e);
                 return '';
             }
         })();
@@ -244,12 +273,13 @@ export const ChatPrompts = {
             }
         })();
 
-        const [realtimeText, schedule, groupContextText, notionDiaryText, feishuDiaryText, notionNotesText] =
+        const [realtimeText, schedule, groupContextText, notionDiaryText, notionSharedDiaryText, feishuDiaryText, notionNotesText] =
             await Promise.all([
                 timed('realtime', realtimePromise),
                 timed('schedule', schedulePromise),
                 timed('groupCtx', groupContextPromise),
                 timed('notionDiary', notionDiaryPromise),
+                timed('notionSharedDiary', notionSharedDiaryPromise),
                 timed('feishuDiary', feishuDiaryPromise),
                 timed('notionNotes', notionNotesPromise),
             ]);
@@ -311,6 +341,7 @@ export const ChatPrompts = {
 
         baseSystemPrompt += groupContextText;
         baseSystemPrompt += notionDiaryText;
+        baseSystemPrompt += notionSharedDiaryText;
         baseSystemPrompt += feishuDiaryText;
         baseSystemPrompt += notionNotesText;
 
@@ -357,7 +388,11 @@ export const ChatPrompts = {
    - 调取记忆: \`[[RECALL: YYYY-MM]]\`，请注意，当用户提及具体某个月份时，或者当你想仔细想某个月份的事情时，欢迎你随时使该动作
    - **添加纪念日**: 如果你觉得今天是个值得纪念的日子（或者你们约定了某天），你可以**主动**将它添加到用户的日历中。单独起一行输出: \`[[ACTION:ADD_EVENT | 标题(Title) | YYYY-MM-DD]]\`。
    - **定时发送消息**: 如果你想在未来某个时间主动发消息（比如晚安、早安或提醒），请单独起一行输出: \`[schedule_message | YYYY-MM-DD HH:MM:SS | fixed | 消息内容]\`，分行可以多输出很多该类消息。
-${notionEnabled ? `   - **翻阅日记(Notion)**: 当聊天涉及过去的事情、回忆、或你想查看之前写过的日记时，**必须**使用: \`[[READ_DIARY: 日期]]\`。支持格式: \`昨天\`、\`前天\`、\`3天前\`、\`1月15日\`、\`2024-01-15\`。` : ''}${feishuEnabled ? `
+${notionEnabled ? `   - **翻阅日记(Notion)**: 当聊天涉及过去的事情、回忆、或你想查看之前写过的日记时，**必须**使用: \`[[READ_DIARY: 日期]]\`。支持格式: \`昨天\`、\`前天\`、\`3天前\`、\`1月15日\`、\`2024-01-15\`。
+   - **补充自己的日记(Notion)**: 只能给你自己写过的日记追加补充，使用: \`[[APPEND_DIARY: 日期 | 补充内容]]\`。不要尝试修改其他角色的正文。
+   - **回复自己日记下的评论(Notion)**: 当你读到自己日记页面里的评论，并想在同一个评论串里回复时，使用: \`[[REPLY_DIARY_COMMENT: 日期 | 评论编号 | 回复内容]]\`。评论编号来自日记正文下方的“[评论1]”“[评论2]”。
+   - **阅读其他角色日记(Notion)**: 可以读取同一 Notion 日记库中其他角色的正文，使用: \`[[READ_SHARED_DIARY: 角色名 | 日期]]\`。这是读取，不是修改。
+   - **评论其他角色日记(Notion)**: 你可以给同一 Notion 日记库里其他角色的日记留下页面评论，使用: \`[[COMMENT_DIARY: 角色名 | 日期 | 评论内容]]\`。这是评论，不是改正文。` : ''}${feishuEnabled ? `
    - **翻阅日记(飞书)**: 当聊天涉及过去的事情时，使用: \`[[FS_READ_DIARY: 日期]]\`。支持格式同上。` : ''}${notionNotesEnabled ? `
    - **翻阅用户笔记**: 当你想看${userProfile.name}写的某篇笔记的详细内容时，使用: \`[[READ_NOTE: 标题关键词]]\`。系统会搜索匹配的笔记并返回内容给你。` : ''}
 ${searchEnabled ? `7. **🔍 主动搜索能力** (非常重要！):
@@ -434,6 +469,14 @@ ${notionEnabled ? `8. **📔 日记系统（你的私人 Notion 日记本）**:
    - \`[[READ_DIARY: 前天]]\` — 前天的
    - \`[[READ_DIARY: 3天前]]\` — N天前
    - \`[[READ_DIARY: 1月15日]]\` — 某月某日
+
+   **✍️ 修改边界：只能改自己的日记**
+   - 如果你想给自己以前的日记补一句后记、修正、补充感受，使用 \`[[APPEND_DIARY: 日期 | 补充内容]]\`。
+   - 这个动作只会查找你自己名下的日记，不能改其他角色的页面。
+   - 如果你想回复自己日记下某条评论，先翻阅自己的日记；看到“[评论1]”这类编号后，使用 \`[[REPLY_DIARY_COMMENT: 日期 | 评论编号 | 回复内容]]\`。
+   - 你可以读取其他角色写在同一 Notion 日记库里的正文：\`[[READ_SHARED_DIARY: 角色名 | 日期]]\`。
+   - 如果你想回应其他角色的日记，可以评论：\`[[COMMENT_DIARY: 角色名 | 日期 | 评论内容]]\`。
+   - 读/评论别人时，只能基于 Notion 页面内容、标题痕迹、公开上下文和你自己的判断；不要假装读到了对方私聊或隐藏设定。
 
    **⚠️ 你必须在以下情况使用 [[READ_DIARY: ...]]（这是规则，不是建议）:**
    - 用户提到"那天"、"之前"、"上次"、"还记得吗"、"你忘了吗" → 翻阅相关日期的日记

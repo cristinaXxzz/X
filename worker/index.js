@@ -14,7 +14,7 @@ const XHS_PUBLISH_HOST_CANDIDATES = [
 function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin || "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Depth, X-Brave-API-Key, X-Notion-API-Key, X-Feishu-Token, X-Xhs-Cookie, X-Netease-Cookie, X-WebDAV-Method, X-WebDAV-Depth, X-WebDAV-Range, X-GitHub-Method, X-GitHub-Api-Version, Mcp-Session-Id, Accept, Range",
     "Access-Control-Expose-Headers": "Mcp-Session-Id",
     "Access-Control-Max-Age": "86400",
@@ -1022,6 +1022,90 @@ export default {
             'Authorization': `Bearer ${notionKey}`,
             'Notion-Version': '2022-06-28'
           }
+        });
+        const text = await notionRes.text();
+        return new Response(text, {
+          status: notionRes.status,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+        });
+      }
+
+      // PATCH /notion/blocks/:blockId/children - 追加页面/块内容
+      if (url.pathname.startsWith('/notion/blocks/') && url.pathname.endsWith('/children') && request.method === 'PATCH') {
+        const blockId = url.pathname.replace('/notion/blocks/', '').replace('/children', '').replace(/\/+$/, '');
+        const body = await request.json();
+        const notionRes = await fetch(`https://api.notion.com/v1/blocks/${blockId}/children`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${notionKey}`,
+            'Notion-Version': '2022-06-28',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        });
+        const text = await notionRes.text();
+        return new Response(text, {
+          status: notionRes.status,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+        });
+      }
+
+      // POST /notion/comments - 给页面添加评论
+      if (url.pathname === '/notion/comments' && request.method === 'POST') {
+        const body = await request.json();
+        const notionRes = await fetch('https://api.notion.com/v1/comments', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${notionKey}`,
+            'Notion-Version': '2022-06-28',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        });
+        const text = await notionRes.text();
+        return new Response(text, {
+          status: notionRes.status,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+        });
+      }
+
+      // GET /notion/comments?block_id=:id - 读取页面/块评论
+      if (url.pathname === '/notion/comments' && request.method === 'GET') {
+        const blockId = url.searchParams.get('block_id');
+        if (!blockId) {
+          return jsonResponse({ error: "Missing query param: block_id" }, { status: 400, origin });
+        }
+        const qs = new URLSearchParams();
+        qs.set('block_id', blockId);
+        qs.set('page_size', url.searchParams.get('page_size') || '100');
+        const startCursor = url.searchParams.get('start_cursor');
+        if (startCursor) qs.set('start_cursor', startCursor);
+        const notionRes = await fetch(`https://api.notion.com/v1/comments?${qs.toString()}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${notionKey}`,
+            'Notion-Version': '2022-06-28',
+          }
+        });
+        const text = await notionRes.text();
+        return new Response(text, {
+          status: notionRes.status,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+        });
+      }
+
+      // PATCH /notion/pages/:pageId - 更新页面属性
+      if (url.pathname.startsWith('/notion/pages/') && request.method === 'PATCH') {
+        const pageId = url.pathname.replace('/notion/pages/', '').replace(/\/+$/, '');
+        const body = await request.json();
+        const notionRes = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${notionKey}`,
+            'Notion-Version': '2022-06-28',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
         });
         const text = await notionRes.text();
         return new Response(text, {

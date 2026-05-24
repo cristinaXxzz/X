@@ -300,7 +300,7 @@ export const RealtimeContextManager = {
     fetchBraveNews: async (apiKey: string): Promise<NewsItem[]> => {
         try {
             // 使用自建的 Cloudflare Worker 代理
-            const workerUrl = 'https://sullymeow.ccwu.cc/news?q=热点新闻&count=5&country=cn';
+            const workerUrl = 'https://sullyos-worker.cristinazhou0122.workers.dev/news?q=热点新闻&count=5&country=cn';
 
             const response = await fetch(workerUrl, {
                 headers: {
@@ -621,7 +621,7 @@ export const RealtimeContextManager = {
 
         try {
             // 使用自建的 Cloudflare Worker 代理
-            const workerUrl = `https://sullymeow.ccwu.cc/search?q=${encodeURIComponent(query)}&count=5`;
+            const workerUrl = `https://sullyos-worker.cristinazhou0122.workers.dev/search?q=${encodeURIComponent(query)}&count=5`;
 
             const response = await fetch(workerUrl, {
                 method: 'GET',
@@ -691,12 +691,22 @@ export interface DiaryPreview {
     title: string;
     date: string;
     url: string;
+    characterName?: string;
+    supplement?: string;
+}
+
+export interface NotionCommentPreview {
+    id: string;
+    discussionId?: string;
+    author: string;
+    createdAt: string;
+    content: string;
 }
 
 export const NotionManager = {
 
     // Worker 代理地址
-    WORKER_URL: 'https://sullymeow.ccwu.cc',
+    WORKER_URL: 'https://sullyos-worker.cristinazhou0122.workers.dev',
 
     /**
      * 测试 Notion 连接（通过 Worker 代理）
@@ -801,6 +811,29 @@ export const NotionManager = {
         }
     },
 
+    getDiaryOwnerFromTitle: (title: string): { owner?: string; cleanTitle: string } => {
+        const match = title.match(/^\[(.+?)\]\s*(.*)$/);
+        if (!match) return { cleanTitle: title };
+        return { owner: match[1], cleanTitle: match[2] || title };
+    },
+
+    pageToDiaryPreview: (page: any): DiaryPreview => {
+        const title = page.properties?.Name?.title?.[0]?.plain_text || '无标题';
+        const parsed = NotionManager.getDiaryOwnerFromTitle(title);
+        const supplementProp = page.properties?.['补充内容'] || page.properties?.Supplement || page.properties?.Comment || page.properties?.['评论'];
+        const supplement = Array.isArray(supplementProp?.rich_text)
+            ? supplementProp.rich_text.map((rt: any) => rt.plain_text || rt.text?.content || '').join('')
+            : '';
+        return {
+            id: page.id,
+            title: parsed.cleanTitle,
+            characterName: parsed.owner,
+            supplement,
+            date: page.properties?.Date?.date?.start || '',
+            url: page.url
+        };
+    },
+
     /**
      * 获取角色最近的日记（通过 Worker 代理）
      */
@@ -843,21 +876,55 @@ export const NotionManager = {
                 return { success: true, entries: [], message: '暂无日记' };
             }
 
-            const entries: DiaryPreview[] = data.results.map((page: any) => {
-                const title = page.properties?.Name?.title?.[0]?.plain_text || '无标题';
-                // 移除角色名前缀，只保留实际标题
-                const cleanTitle = title.replace(/^\[.*?\]\s*/, '');
-                return {
-                    id: page.id,
-                    title: cleanTitle,
-                    date: page.properties?.Date?.date?.start || '',
-                    url: page.url
-                };
-            });
+            const entries: DiaryPreview[] = data.results.map(NotionManager.pageToDiaryPreview);
 
             return { success: true, entries, message: '获取成功' };
         } catch (e: any) {
             console.error('Get diaries failed:', e);
+            return { success: false, entries: [], message: `获取失败: ${e.message}` };
+        }
+    },
+
+    /**
+     * 获取数据库中最近的日记，不按当前角色过滤。
+     * 用于“共享/串线”场景：角色可以知道别的角色写过什么，但仍然不会读取私聊上下文。
+     */
+    getRecentSharedDiaries: async (
+        apiKey: string,
+        databaseId: string,
+        limit: number = 12,
+        excludeCharacterName?: string
+    ): Promise<{ success: boolean; entries: DiaryPreview[]; message: string }> => {
+        try {
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/query`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notion-API-Key': apiKey
+                },
+                body: JSON.stringify({
+                    database_id: databaseId,
+                    sorts: [{ property: 'Date', direction: 'descending' }],
+                    page_size: limit
+                })
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                console.error('Query shared diaries failed:', response.status, text);
+                return { success: false, entries: [], message: `查询失败: ${response.status}` };
+            }
+
+            const data = JSON.parse(text);
+            let entries: DiaryPreview[] = (data.results || []).map(NotionManager.pageToDiaryPreview);
+            if (excludeCharacterName) {
+                entries = entries.filter(entry => entry.characterName !== excludeCharacterName);
+            }
+
+            return { success: true, entries, message: entries.length ? '获取成功' : '暂无日记' };
+        } catch (e: any) {
+            console.error('Get shared diaries failed:', e);
             return { success: false, entries: [], message: `获取失败: ${e.message}` };
         }
     },
@@ -911,20 +978,64 @@ export const NotionManager = {
                 return { success: true, entries: [], message: `没有找到 ${date} 的日记` };
             }
 
-            const entries: DiaryPreview[] = data.results.map((page: any) => {
-                const title = page.properties?.Name?.title?.[0]?.plain_text || '无标题';
-                const cleanTitle = title.replace(/^\[.*?\]\s*/, '');
-                return {
-                    id: page.id,
-                    title: cleanTitle,
-                    date: page.properties?.Date?.date?.start || '',
-                    url: page.url
-                };
-            });
+            const entries: DiaryPreview[] = data.results.map(NotionManager.pageToDiaryPreview);
 
             return { success: true, entries, message: `找到 ${entries.length} 篇日记` };
         } catch (e: any) {
             console.error('Get diary by date failed:', e);
+            return { success: false, entries: [], message: `查询失败: ${e.message}` };
+        }
+    },
+
+    /**
+     * 按日期读取共享日记。characterName 为空或“全部/all/*”时返回当天全部角色日记。
+     */
+    getSharedDiariesByDate: async (
+        apiKey: string,
+        databaseId: string,
+        characterName: string | undefined,
+        date: string
+    ): Promise<{ success: boolean; entries: DiaryPreview[]; message: string }> => {
+        const shouldFilterCharacter = !!characterName && !['全部', '所有', 'all', '*'].includes(characterName.trim().toLowerCase());
+        const filter: any = shouldFilterCharacter
+            ? {
+                and: [
+                    { property: 'Name', title: { starts_with: `[${characterName}]` } },
+                    { property: 'Date', date: { equals: date } }
+                ]
+            }
+            : {
+                property: 'Date',
+                date: { equals: date }
+            };
+
+        try {
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/query`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notion-API-Key': apiKey
+                },
+                body: JSON.stringify({
+                    database_id: databaseId,
+                    filter,
+                    sorts: [{ property: 'Date', direction: 'descending' }],
+                    page_size: 20
+                })
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                console.error('Query shared diary by date failed:', response.status, text);
+                return { success: false, entries: [], message: `查询失败: ${response.status}` };
+            }
+
+            const data = JSON.parse(text);
+            const entries: DiaryPreview[] = (data.results || []).map(NotionManager.pageToDiaryPreview);
+            return { success: true, entries, message: entries.length ? `找到 ${entries.length} 篇日记` : `没有找到 ${date} 的日记` };
+        } catch (e: any) {
+            console.error('Get shared diary by date failed:', e);
             return { success: false, entries: [], message: `查询失败: ${e.message}` };
         }
     },
@@ -964,6 +1075,194 @@ export const NotionManager = {
         } catch (e: any) {
             console.error('Read diary content failed:', e);
             return { success: false, content: '', message: `读取失败: ${e.message}` };
+        }
+    },
+
+    getDiaryComments: async (
+        apiKey: string,
+        pageId: string
+    ): Promise<{ success: boolean; comments: NotionCommentPreview[]; message: string }> => {
+        try {
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/comments?block_id=${encodeURIComponent(pageId)}&page_size=100`, {
+                method: 'GET',
+                headers: {
+                    'X-Notion-API-Key': apiKey
+                }
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                console.error('Read diary comments failed:', response.status, text);
+                return { success: false, comments: [], message: `读取评论失败: ${response.status}` };
+            }
+
+            const data = JSON.parse(text);
+            const comments: NotionCommentPreview[] = (data.results || []).map((comment: any) => ({
+                id: comment.id,
+                discussionId: comment.discussion_id,
+                author: getNotionCommentAuthor(comment),
+                createdAt: comment.created_time || '',
+                content: notionRichTextToPlain(comment.rich_text || [])
+            })).filter((comment: NotionCommentPreview) => comment.content.trim());
+
+            return { success: true, comments, message: comments.length ? '读取成功' : '暂无评论' };
+        } catch (e: any) {
+            console.error('Read diary comments failed:', e);
+            return { success: false, comments: [], message: `读取评论失败: ${e.message}` };
+        }
+    },
+
+    readDiaryContentWithComments: async (
+        apiKey: string,
+        pageId: string
+    ): Promise<{ success: boolean; content: string; comments: NotionCommentPreview[]; message: string }> => {
+        const [contentResult, commentsResult] = await Promise.all([
+            NotionManager.readDiaryContent(apiKey, pageId),
+            NotionManager.getDiaryComments(apiKey, pageId)
+        ]);
+
+        if (!contentResult.success) {
+            return {
+                success: false,
+                content: '',
+                comments: commentsResult.comments || [],
+                message: contentResult.message
+            };
+        }
+
+        let content = contentResult.content;
+        const comments = commentsResult.success ? commentsResult.comments : [];
+        if (comments.length > 0) {
+            content += `\n\n【页面评论】\n${comments.map(comment => {
+                const index = comments.indexOf(comment) + 1;
+                const time = comment.createdAt ? new Date(comment.createdAt).toLocaleString() : '未知时间';
+                return `- [评论${index}] [${time}] ${comment.author}: ${comment.content}`;
+            }).join('\n')}`;
+        }
+
+        return { success: true, content, comments, message: commentsResult.success ? '读取成功' : `正文已读取；${commentsResult.message}` };
+    },
+
+    appendDiaryContent: async (
+        apiKey: string,
+        pageId: string,
+        content: string,
+        mood?: string,
+        characterName?: string
+    ): Promise<{ success: boolean; message: string }> => {
+        try {
+            const children = parseMarkdownToNotionBlocks(content, mood, characterName);
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/blocks/${pageId}/children`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notion-API-Key': apiKey
+                },
+                body: JSON.stringify({ children })
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                try {
+                    const errJson = JSON.parse(text);
+                    return { success: false, message: `追加失败: ${errJson.error || errJson.message || response.status}` };
+                } catch {
+                    return { success: false, message: `追加失败: ${response.status}` };
+                }
+            }
+
+            return { success: true, message: '日记已追加' };
+        } catch (e: any) {
+            return { success: false, message: `追加失败: ${e.message}` };
+        }
+    },
+
+    createDiaryComment: async (
+        apiKey: string,
+        pageId: string,
+        comment: string,
+        displayName?: string,
+        discussionId?: string
+    ): Promise<{ success: boolean; message: string }> => {
+        try {
+            const body: any = discussionId
+                ? { discussion_id: discussionId, markdown: comment }
+                : { parent: { page_id: pageId }, markdown: comment };
+            if (displayName) {
+                body.display_name = { type: 'custom', custom: { name: displayName } };
+            }
+
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/comments`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notion-API-Key': apiKey
+                },
+                body: JSON.stringify(body)
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                try {
+                    const errJson = JSON.parse(text);
+                    return { success: false, message: `评论失败: ${errJson.error || errJson.message || response.status}` };
+                } catch {
+                    return { success: false, message: `评论失败: ${response.status}` };
+                }
+            }
+
+            return { success: true, message: '评论已写入 Notion' };
+        } catch (e: any) {
+            return { success: false, message: `评论失败: ${e.message}` };
+        }
+    },
+
+    appendDiarySupplementProperty: async (
+        apiKey: string,
+        pageId: string,
+        existingSupplement: string | undefined,
+        comment: string,
+        displayName?: string,
+        propertyName: string = '补充内容'
+    ): Promise<{ success: boolean; message: string }> => {
+        try {
+            const now = new Date();
+            const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const line = `[${timestamp}] ${displayName || '角色'}：${comment}`;
+            const nextText = [existingSupplement?.trim(), line].filter(Boolean).join('\n');
+
+            const response = await fetch(`${NotionManager.WORKER_URL}/notion/pages/${pageId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Notion-API-Key': apiKey
+                },
+                body: JSON.stringify({
+                    properties: {
+                        [propertyName]: {
+                            rich_text: plainTextToRichText(nextText)
+                        }
+                    }
+                })
+            });
+
+            const text = await response.text();
+
+            if (!response.ok) {
+                try {
+                    const errJson = JSON.parse(text);
+                    return { success: false, message: `补充列写入失败: ${errJson.error || errJson.message || response.status}` };
+                } catch {
+                    return { success: false, message: `补充列写入失败: ${response.status}` };
+                }
+            }
+
+            return { success: true, message: '补充内容已写入表格列' };
+        } catch (e: any) {
+            return { success: false, message: `补充列写入失败: ${e.message}` };
         }
     },
 
@@ -1501,6 +1800,32 @@ function splitRichTextItem(item: any): any[] {
     return chunks;
 }
 
+function plainTextToRichText(text: string): any[] {
+    const safe = text || '';
+    const chunks: any[] = [];
+    for (let i = 0; i < safe.length; i += NOTION_MAX_RICH_TEXT_LEN) {
+        chunks.push({
+            type: 'text',
+            text: { content: safe.slice(i, i + NOTION_MAX_RICH_TEXT_LEN) }
+        });
+    }
+    return chunks.length > 0 ? chunks : [{ type: 'text', text: { content: '' } }];
+}
+
+function notionRichTextToPlain(richText: any[]): string {
+    if (!Array.isArray(richText)) return '';
+    return richText.map((rt: any) => rt.plain_text || rt.text?.content || '').join('');
+}
+
+function getNotionCommentAuthor(comment: any): string {
+    const createdBy = comment?.created_by;
+    if (!createdBy) return '未知作者';
+    if (createdBy.name) return createdBy.name;
+    if (createdBy.type === 'bot') return createdBy.bot?.owner?.user?.name || createdBy.bot?.owner?.workspace_name || 'Notion Bot';
+    if (createdBy.type === 'person') return createdBy.person?.email || 'Notion 用户';
+    return createdBy.id || '未知作者';
+}
+
 function normalizeBlocksForNotion(blocks: any[]): any[] {
     // 1. 每个 block 的 rich_text 切 2000 字符
     const safe = blocks.map(block => {
@@ -1733,7 +2058,7 @@ function formatFeishuDiaryContent(content: string, mood?: string, characterName?
 
 export const FeishuManager = {
 
-    WORKER_URL: 'https://sullymeow.ccwu.cc',
+    WORKER_URL: 'https://sullyos-worker.cristinazhou0122.workers.dev',
 
     /**
      * 获取飞书 tenant_access_token（通过 Worker 代理，带缓存）

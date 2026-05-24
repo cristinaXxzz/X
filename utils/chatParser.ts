@@ -264,7 +264,7 @@ export const ChatParser = {
             // Strip markdown headers (# ## ### etc) → keep the text
             .replace(/^#{1,6}\s+/gm, '')
             // Strip residual action/system tags that weren't caught earlier
-            .replace(/\[\[(?:ACTION|RECALL|SEARCH|DIARY|READ_DIARY|FS_DIARY|FS_READ_DIARY|DIARY_START|DIARY_END|FS_DIARY_START|FS_DIARY_END|MUSIC_ACTION)[:\s][\s\S]*?\]\]/g, '')
+            .replace(/\[\[(?:ACTION|RECALL|SEARCH|DIARY|READ_DIARY|READ_SHARED_DIARY|APPEND_DIARY|REPLY_DIARY_COMMENT|COMMENT_DIARY|FS_DIARY|FS_READ_DIARY|DIARY_START|DIARY_END|FS_DIARY_START|FS_DIARY_END|MUSIC_ACTION)[:\s][\s\S]*?\]\]/g, '')
             .replace(/\[schedule_message[^\]]*\]/g, '');
         if (!options?.keepCitations) {
             result = result

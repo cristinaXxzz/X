@@ -1199,6 +1199,48 @@ export const useChatAI = ({
                 return '';
             };
 
+            const parseDiaryCommandParts = (raw: string, expectedMinParts: number): string[] => {
+                const parts = raw.split('|').map(part => part.trim()).filter(Boolean);
+                return parts.length >= expectedMinParts ? parts : [];
+            };
+
+            const readDiaryEntriesAndRecall = async (
+                entries: Array<{ id: string; title: string; date: string; characterName?: string }>,
+                intro: string,
+                tagPattern: RegExp,
+                usageLabel: string
+            ): Promise<boolean> => {
+                if (entries.length === 0) return false;
+                const diaryContents: string[] = [];
+                for (const entry of entries) {
+                    const readResult = await NotionManager.readDiaryContentWithComments(
+                        realtimeConfig!.notionApiKey,
+                        entry.id
+                    );
+                    if (readResult.success) {
+                        const owner = entry.characterName ? `${entry.characterName}的` : '';
+                        diaryContents.push(`📔「${owner}${entry.title}」(${entry.date})\n${readResult.content}`);
+                    }
+                }
+                if (diaryContents.length === 0) return false;
+
+                const cleaned = aiContent.replace(tagPattern, '').trim() || '我翻了一下 Notion...';
+                const diaryMessages = [
+                    ...fullMessages,
+                    { role: 'assistant', content: cleaned },
+                    { role: 'user', content: `[系统: ${intro}，以下是 Notion 页面正文]\n\n${diaryContents.join('\n\n---\n\n')}\n\n[系统: 你已经看完了页面。现在请你：\n1. 先正常回应用户刚才说的话\n2. 自然地把你读到的内容融入回复\n3. 如果这是别人的日记，请明确保持边界：你能读页面正文，但不能修改正文，也不要假装读到了私聊或隐藏上下文\n4. 用多条消息回复\n5. 严禁再输出日记工具标记]` }
+                ];
+
+                data = await safeFetchJson(`${baseUrl}/chat/completions`, {
+                    method: 'POST', headers,
+                    body: JSON.stringify({ model: effectiveApi.model, messages: diaryMessages, temperature: 0.8, max_tokens: 8000, stream: false })
+                });
+                updateTokenUsage(data, historyMsgCount, usageLabel);
+                aiContent = data.choices?.[0]?.message?.content || '';
+                aiContent = normalizeAiContent(aiContent);
+                return true;
+            };
+
             if (readDiaryMatch) {
                 const dateInput = readDiaryMatch[1].trim();
                 console.log('📖 [ReadDiary] AI想翻阅日记:', dateInput);
@@ -1221,7 +1263,7 @@ export const useChatAI = ({
                                 setDiaryStatus(`找到 ${findResult.entries.length} 篇日记，正在阅读...`);
                                 const diaryContents: string[] = [];
                                 for (const entry of findResult.entries) {
-                                    const readResult = await NotionManager.readDiaryContent(
+                                    const readResult = await NotionManager.readDiaryContentWithComments(
                                         realtimeConfig.notionApiKey,
                                         entry.id
                                     );
@@ -1290,6 +1332,175 @@ export const useChatAI = ({
 
             // 清理残留的读日记标记
             aiContent = aiContent.replace(/\[\[READ_DIARY:.*?\]\]/g, '').trim();
+
+            const appendDiaryMatch = aiContent.match(/\[\[APPEND_DIARY:\s*(.+?)\]\]/s);
+            if (appendDiaryMatch) {
+                const parts = parseDiaryCommandParts(appendDiaryMatch[1].trim(), 2);
+                if (parts.length >= 2 && realtimeConfig?.notionEnabled && realtimeConfig?.notionApiKey && realtimeConfig?.notionDatabaseId) {
+                    const targetDate = parseDiaryDate(parts[0]);
+                    const appendContent = parts.slice(1).join(' | ');
+                    if (targetDate && appendContent) {
+                        try {
+                            const findResult = await NotionManager.getDiaryByDate(
+                                realtimeConfig.notionApiKey,
+                                realtimeConfig.notionDatabaseId,
+                                char.name,
+                                targetDate
+                            );
+                            const target = findResult.entries[0];
+                            if (findResult.success && target) {
+                                const result = await NotionManager.appendDiaryContent(
+                                    realtimeConfig.notionApiKey,
+                                    target.id,
+                                    appendContent,
+                                    undefined,
+                                    char.name
+                                );
+                                addToast(result.success ? `📔 ${char.name}补充了自己的日记` : `日记补充失败: ${result.message}`, result.success ? 'success' : 'error');
+                            } else {
+                                addToast(`${targetDate} 没找到 ${char.name} 自己的日记`, 'info');
+                            }
+                        } catch (e) {
+                            console.error('📔 [AppendDiary] 追加异常:', e);
+                            addToast('日记补充失败', 'error');
+                        }
+                    }
+                }
+                aiContent = aiContent.replace(/\[\[APPEND_DIARY:.*?\]\]/gs, '').trim();
+            }
+
+            const replyDiaryCommentMatch = aiContent.match(/\[\[REPLY_DIARY_COMMENT:\s*(.+?)\]\]/s);
+            if (replyDiaryCommentMatch) {
+                const parts = parseDiaryCommandParts(replyDiaryCommentMatch[1].trim(), 3);
+                if (parts.length >= 3 && realtimeConfig?.notionEnabled && realtimeConfig?.notionApiKey && realtimeConfig?.notionDatabaseId) {
+                    const targetDate = parseDiaryDate(parts[0]);
+                    const commentIndexRaw = parts[1].replace(/[^\d]/g, '');
+                    const commentIndex = commentIndexRaw ? parseInt(commentIndexRaw, 10) : NaN;
+                    const reply = parts.slice(2).join(' | ');
+                    if (targetDate && commentIndex > 0 && reply) {
+                        try {
+                            const findResult = await NotionManager.getDiaryByDate(
+                                realtimeConfig.notionApiKey,
+                                realtimeConfig.notionDatabaseId,
+                                char.name,
+                                targetDate
+                            );
+                            const target = findResult.entries[0];
+                            if (findResult.success && target) {
+                                const commentsResult = await NotionManager.getDiaryComments(
+                                    realtimeConfig.notionApiKey,
+                                    target.id
+                                );
+                                const targetComment = commentsResult.comments[commentIndex - 1];
+                                if (commentsResult.success && targetComment?.discussionId) {
+                                    const result = await NotionManager.createDiaryComment(
+                                        realtimeConfig.notionApiKey,
+                                        target.id,
+                                        reply,
+                                        char.name,
+                                        targetComment.discussionId
+                                    );
+                                    addToast(result.success ? `💬 ${char.name}回复了自己日记下的评论` : `回复评论失败: ${result.message}`, result.success ? 'success' : 'error');
+                                } else {
+                                    addToast(`没有找到 ${targetDate} 日记下的评论${commentIndex}`, 'info');
+                                }
+                            } else {
+                                addToast(`${targetDate} 没找到 ${char.name} 自己的日记`, 'info');
+                            }
+                        } catch (e) {
+                            console.error('💬 [ReplyDiaryComment] 回复异常:', e);
+                            addToast('回复日记评论失败', 'error');
+                        }
+                    }
+                }
+                aiContent = aiContent.replace(/\[\[REPLY_DIARY_COMMENT:.*?\]\]/gs, '').trim();
+            }
+
+            const readSharedDiaryMatch = aiContent.match(/\[\[READ_SHARED_DIARY:\s*(.+?)\]\]/);
+            if (readSharedDiaryMatch) {
+                const parts = parseDiaryCommandParts(readSharedDiaryMatch[1].trim(), 2);
+                if (parts.length >= 2 && realtimeConfig?.notionEnabled && realtimeConfig?.notionApiKey && realtimeConfig?.notionDatabaseId) {
+                    const ownerName = parts[0];
+                    const targetDate = parseDiaryDate(parts[1]);
+                    if (targetDate) {
+                        try {
+                            setDiaryStatus(`正在翻阅 ${ownerName} ${targetDate} 的 Notion 日记...`);
+                            const findResult = await NotionManager.getSharedDiariesByDate(
+                                realtimeConfig.notionApiKey,
+                                realtimeConfig.notionDatabaseId,
+                                ownerName,
+                                targetDate
+                            );
+                            if (findResult.success && findResult.entries.length > 0) {
+                                const ok = await readDiaryEntriesAndRecall(
+                                    findResult.entries,
+                                    `你翻阅了 ${ownerName} 在 ${targetDate} 写在同一 Notion 日记库里的日记`,
+                                    /\[\[READ_SHARED_DIARY:.*?\]\]/g,
+                                    'read-shared-diary-notion'
+                                );
+                                if (ok) addToast(`📖 ${char.name}翻阅了${ownerName}的日记`, 'info');
+                            } else {
+                                await diaryFallbackCall(`你想翻阅 ${ownerName} 在 ${targetDate} 的日记，但没有找到`, /\[\[READ_SHARED_DIARY:.*?\]\]/g);
+                            }
+                        } catch (e) {
+                            console.error('📖 [ReadSharedDiary] 读取异常:', e);
+                            await diaryFallbackCall('你想翻阅其他角色的 Notion 日记但读取出了问题', /\[\[READ_SHARED_DIARY:.*?\]\]/g);
+                        } finally {
+                            setDiaryStatus('');
+                        }
+                    }
+                }
+                aiContent = aiContent.replace(/\[\[READ_SHARED_DIARY:.*?\]\]/g, '').trim();
+            }
+
+            const commentDiaryMatch = aiContent.match(/\[\[COMMENT_DIARY:\s*(.+?)\]\]/s);
+            if (commentDiaryMatch) {
+                const parts = parseDiaryCommandParts(commentDiaryMatch[1].trim(), 3);
+                if (parts.length >= 3 && realtimeConfig?.notionEnabled && realtimeConfig?.notionApiKey && realtimeConfig?.notionDatabaseId) {
+                    const ownerName = parts[0];
+                    const targetDate = parseDiaryDate(parts[1]);
+                    const comment = parts.slice(2).join(' | ');
+                    if (targetDate && comment) {
+                        try {
+                            const findResult = await NotionManager.getSharedDiariesByDate(
+                                realtimeConfig.notionApiKey,
+                                realtimeConfig.notionDatabaseId,
+                                ownerName,
+                                targetDate
+                            );
+                            const target = findResult.entries[0];
+                            if (findResult.success && target) {
+                                const result = await NotionManager.createDiaryComment(
+                                    realtimeConfig.notionApiKey,
+                                    target.id,
+                                    comment,
+                                    char.name
+                                );
+                                if (result.success) {
+                                    const supplementResult = await NotionManager.appendDiarySupplementProperty(
+                                        realtimeConfig.notionApiKey,
+                                        target.id,
+                                        target.supplement,
+                                        comment,
+                                        char.name
+                                    );
+                                    if (!supplementResult.success) {
+                                        console.warn('💬 [CommentDiary] 评论成功，但补充列写入失败:', supplementResult.message);
+                                        addToast(`评论成功，但补充内容列写入失败: ${supplementResult.message}`, 'error');
+                                    }
+                                }
+                                addToast(result.success ? `💬 ${char.name}评论了${ownerName}的日记` : `日记评论失败: ${result.message}`, result.success ? 'success' : 'error');
+                            } else {
+                                addToast(`${targetDate} 没找到 ${ownerName} 的日记`, 'info');
+                            }
+                        } catch (e) {
+                            console.error('💬 [CommentDiary] 评论异常:', e);
+                            addToast('日记评论失败', 'error');
+                        }
+                    }
+                }
+                aiContent = aiContent.replace(/\[\[COMMENT_DIARY:.*?\]\]/gs, '').trim();
+            }
 
             // 5.8 Handle Feishu Diary Writing (写日记到飞书多维表格 - 独立于 Notion)
             const fsDiaryStartMatch = aiContent.match(/\[\[FS_DIARY_START:\s*(.+?)\]\]\n?([\s\S]*?)\[\[FS_DIARY_END\]\]/);
