@@ -377,7 +377,7 @@ const Launcher: React.FC = () => {
   );
 
   const quickApps = useMemo(() => {
-    const ids = [AppID.Chat, AppID.GroupChat, AppID.Music, AppID.Character];
+    const ids = [AppID.Chat, AppID.GroupChat, AppID.Music, AppID.Settings];
     return ids
       .map(id => INSTALLED_APPS.find(app => app.id === id))
       .filter(Boolean) as typeof INSTALLED_APPS;
