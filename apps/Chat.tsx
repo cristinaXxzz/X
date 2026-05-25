@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
-import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory, DailySchedule, ScheduleSlot } from '../types';
+import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory } from '../types';
 import { processImage } from '../utils/file';
 import { safeResponseJson, extractContent } from '../utils/safeApi';
-import { generateDailyScheduleForChar, isScheduleFeatureOn } from '../utils/scheduleGenerator';
 import { formatMessageWithTime } from '../utils/messageFormat';
 import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
 import { isMcdConfigured } from '../utils/mcdMcpClient';
@@ -63,15 +62,11 @@ const Chat: React.FC = () => {
     // Reply Logic
     const [replyTarget, setReplyTarget] = useState<Message | null>(null);
 
-    const [modalType, setModalType] = useState<'none' | 'transfer' | 'emoji-import' | 'chat-settings' | 'message-options' | 'edit-message' | 'delete-emoji' | 'delete-category' | 'add-category' | 'history-manager' | 'archive-settings' | 'prompt-editor' | 'category-options' | 'category-visibility' | 'schedule'>('none');
-    const [scheduleData, setScheduleData] = useState<DailySchedule | null>(null);
-    const [isScheduleGenerating, setIsScheduleGenerating] = useState(false);
+    const [modalType, setModalType] = useState<'none' | 'emoji-import' | 'chat-settings' | 'message-options' | 'edit-message' | 'delete-emoji' | 'delete-category' | 'add-category' | 'history-manager' | 'archive-settings' | 'prompt-editor' | 'category-options' | 'category-visibility'>('none');
     const [allHistoryMessages, setAllHistoryMessages] = useState<Message[]>([]);
-    const [transferAmt, setTransferAmt] = useState('');
     const [emojiImportText, setEmojiImportText] = useState('');
     const [settingsContextLimit, setSettingsContextLimit] = useState(500);
     const [settingsHideSysLogs, setSettingsHideSysLogs] = useState(false);
-    const [settingsHtmlModeCustomPrompt, setSettingsHtmlModeCustomPrompt] = useState('');
     const [preserveContext, setPreserveContext] = useState(true);
     const [isVectorizing, setIsVectorizing] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -399,6 +394,109 @@ const Chat: React.FC = () => {
         }
     };
 
+    const handleAddCategory = async () => {
+        const name = newCategoryName.trim();
+        if (!name) return;
+        const category: EmojiCategory = {
+            id: `cat-${Date.now()}`,
+            name,
+        };
+        await DB.saveEmojiCategory(category);
+        setCategories(prev => [...prev, category]);
+        setActiveCategory(category.id);
+        setNewCategoryName('');
+        setModalType('none');
+        addToast('表情分类已创建', 'success');
+    };
+
+    const handleImportEmoji = async () => {
+        const lines = emojiImportText.split('\n').map(line => line.trim()).filter(Boolean);
+        if (lines.length === 0) return;
+
+        let imported = 0;
+        for (const line of lines) {
+            const parts = line.split('--').map(part => part.trim());
+            if (parts.length < 2 || !parts[0] || !parts[1]) continue;
+            await DB.saveEmoji(parts[0], parts.slice(1).join('--'), activeCategory);
+            imported++;
+        }
+
+        await loadEmojiData();
+        setEmojiImportText('');
+        setModalType('none');
+        addToast(imported > 0 ? `已导入 ${imported} 个表情` : '没有识别到可导入的表情', imported > 0 ? 'success' : 'info');
+    };
+
+    const persistArchivePrompts = (next: { id: string; name: string; content: string }[]) => {
+        localStorage.setItem('chat_archive_prompts', JSON.stringify(next.filter(p => !p.id.startsWith('preset_'))));
+    };
+
+    const createNewPrompt = () => {
+        setEditingPrompt({
+            id: `custom_${Date.now()}`,
+            name: '自定义归档提示词',
+            content: '',
+        });
+        setModalType('prompt-editor');
+    };
+
+    const editSelectedPrompt = () => {
+        const prompt = archivePrompts.find(p => p.id === selectedPromptId);
+        if (!prompt) return;
+        setEditingPrompt({ ...prompt });
+        setModalType('prompt-editor');
+    };
+
+    const handleSavePrompt = () => {
+        if (!editingPrompt) return;
+        const cleanPrompt = {
+            ...editingPrompt,
+            name: editingPrompt.name.trim() || '未命名提示词',
+            content: editingPrompt.content.trim(),
+        };
+        const next = archivePrompts.some(p => p.id === cleanPrompt.id)
+            ? archivePrompts.map(p => p.id === cleanPrompt.id ? cleanPrompt : p)
+            : [...archivePrompts, cleanPrompt];
+        setArchivePrompts(next);
+        setSelectedPromptId(cleanPrompt.id);
+        localStorage.setItem('chat_active_archive_prompt_id', cleanPrompt.id);
+        persistArchivePrompts(next);
+        setEditingPrompt(null);
+        setModalType('archive-settings');
+        addToast('提示词已保存', 'success');
+    };
+
+    const handleDeletePrompt = (id: string) => {
+        const next = archivePrompts.filter(p => p.id !== id);
+        setArchivePrompts(next);
+        persistArchivePrompts(next);
+        if (selectedPromptId === id) {
+            setSelectedPromptId('preset_rational');
+            localStorage.setItem('chat_active_archive_prompt_id', 'preset_rational');
+        }
+    };
+
+    const handleDeleteCategory = async () => {
+        if (!selectedCategory || selectedCategory.isSystem || selectedCategory.id === 'default') return;
+        await DB.deleteEmojiCategory(selectedCategory.id);
+        await loadEmojiData();
+        setSelectedCategory(null);
+        setActiveCategory('default');
+        setModalType('none');
+        addToast('表情分类已删除', 'success');
+    };
+
+    const handleSaveCategoryVisibility = async (categoryId: string, allowedCharacterIds: string[] | undefined) => {
+        const category = categories.find(c => c.id === categoryId);
+        if (!category) return;
+        const updated = { ...category, allowedCharacterIds };
+        await DB.saveEmojiCategory(updated);
+        setCategories(prev => prev.map(c => c.id === categoryId ? updated : c));
+        setSelectedCategory(updated);
+        setModalType('none');
+        addToast('分类可见性已保存', 'success');
+    };
+
     // Hydrate voice data from IndexedDB for currently visible messages.
     // Voice URLs are stored as blob: URLs that become invalid whenever the
     // component unmounts — persisting the raw blob and rebuilding the URL on
@@ -506,7 +604,6 @@ const Chat: React.FC = () => {
             if (char) {
                 setSettingsContextLimit(char.contextLimit || 500);
                 setSettingsHideSysLogs(char.hideSystemLogs || false);
-                setSettingsHtmlModeCustomPrompt((char as any).htmlModeCustomPrompt || '');
                 clearUnread(char.id);
             }
             // Per-character translation toggle + language pair
@@ -536,25 +633,6 @@ const Chat: React.FC = () => {
             setFlashMsgId(null);
         }
     }, [activeCharacterId, reloadMessages]);
-
-    // Auto-generate daily schedule (fire-and-forget on chat load)
-    // 总开关关闭时完全跳过：不查询 DB、不调用副 API、不跑兜底
-    useEffect(() => {
-        if (!char || !apiConfig.apiKey) return;
-        if (!isScheduleFeatureOn(char)) {
-            setScheduleData(null);
-            return;
-        }
-        const today = new Date().toISOString().split('T')[0];
-        DB.getDailySchedule(char.id, today).then(existing => {
-            if (!existing) {
-                // Generate in background, don't block chat
-                generateDailySchedule(char, false);
-            } else {
-                setScheduleData(existing);
-            }
-        }).catch(() => {});
-    }, [activeCharacterId, char?.scheduleFeatureEnabled]);
 
     // Load all messages when history-manager modal opens
     useEffect(() => {
@@ -864,7 +942,6 @@ const Chat: React.FC = () => {
 
     const handlePanelAction = (type: string, payload?: any) => {
         switch (type) {
-            case 'transfer': setModalType('transfer'); break;
             case 'poke': handleSendText('[戳一戳]', 'interaction'); break;
             case 'archive': setModalType('archive-settings'); break;
             case 'settings': setModalType('chat-settings'); break;
@@ -876,8 +953,6 @@ const Chat: React.FC = () => {
             case 'category-options': setSelectedCategory(payload); setModalType('category-options'); break;
             case 'delete-category-req': setSelectedCategory(payload); setModalType('delete-category'); break;
             case 'proactive': setShowProactiveModal(true); break;
-            case 'emotion': setModalType('schedule'); break; // 情绪已并入日程，打开同一 modal
-            case 'schedule': setModalType('schedule'); break;
             case 'mcd-not-configured':
                 addToast('请先到设置 → 麦当劳 启用并填入 MCP Token', 'info');
                 break;
@@ -887,22 +962,6 @@ const Chat: React.FC = () => {
             case 'mcd-end':
                 handleSendText(MCD_DEACTIVATE_TRIGGER, 'text', { mcdDeactivate: true });
                 break;
-            case 'html-mode-toggle': {
-                if (!char) break;
-                const next = !((char as any).htmlModeEnabled);
-                updateCharacter(char.id, { htmlModeEnabled: next } as any);
-                addToast(next ? 'HTML 模式已开启' : 'HTML 模式已关闭', next ? 'success' : 'info');
-                break;
-            }
-            case 'html-mode-settings': {
-                // 长按 → 跳进聊天设置 modal 的 HTML 模块板块 (顺便确保开关已打开, 不然滚下去看不见 textarea)
-                if (!char) break;
-                if (!(char as any).htmlModeEnabled) {
-                    updateCharacter(char.id, { htmlModeEnabled: true } as any);
-                }
-                setModalType('chat-settings');
-                break;
-            }
             case 'thinking-settings': {
                 // 「展示思考」按钮 → 打开思考链设置 modal（开关 / 卡片风格 / 配色 / 追加提示词）
                 if (!char) break;
@@ -1015,222 +1074,6 @@ const Chat: React.FC = () => {
     }, [char, reloadMessages]);
 
     // --- Schedule Handlers ---
-    const loadSchedule = async () => {
-        if (!char) return;
-        if (!isScheduleFeatureOn(char)) { setScheduleData(null); return; }
-        const today = new Date().toISOString().split('T')[0];
-        const s = await DB.getDailySchedule(char.id, today);
-        setScheduleData(s);
-    };
-
-    // Load schedule when modal opens
-    React.useEffect(() => {
-        if (modalType === 'schedule') loadSchedule();
-    }, [modalType]);
-
-    const handleScheduleEdit = async (index: number, slot: ScheduleSlot) => {
-        if (!scheduleData) return;
-        const newSlots = [...scheduleData.slots];
-        newSlots[index] = slot;
-        const updated = { ...scheduleData, slots: newSlots };
-        setScheduleData(updated);
-        await DB.saveDailySchedule(updated);
-    };
-
-    const handleScheduleDelete = async (index: number) => {
-        if (!scheduleData) return;
-        const newSlots = scheduleData.slots.filter((_, i) => i !== index);
-        const updated = { ...scheduleData, slots: newSlots };
-        setScheduleData(updated);
-        await DB.saveDailySchedule(updated);
-    };
-
-    const handleScheduleCoverChange = async (dataUrl: string) => {
-        if (!scheduleData) return;
-        const updated = { ...scheduleData, coverImage: dataUrl };
-        setScheduleData(updated);
-        await DB.saveDailySchedule(updated);
-    };
-
-    const generateDailySchedule = async (targetChar: typeof char, forceRegenerate: boolean = false) => {
-        if (!targetChar || isScheduleGenerating) return;
-        setIsScheduleGenerating(true);
-        try {
-            const result = await generateDailyScheduleForChar(targetChar, userProfile, apiConfig, forceRegenerate);
-            if (result) setScheduleData(result);
-        } catch (e) {
-            console.error('[Schedule] Generation error:', e);
-        } finally {
-            setIsScheduleGenerating(false);
-        }
-    };
-
-    const handleScheduleStyleChange = async (style: 'lifestyle' | 'mindful') => {
-        if (!char) return;
-        // 与情绪/意识流强制同步：启用日程时自动启用情绪感知
-        const prevEmotion = char.emotionConfig;
-        const nextEmotion = { ...(prevEmotion || {}), enabled: true };
-        updateCharacter(char.id, { scheduleStyle: style, emotionConfig: nextEmotion });
-        // Force regenerate with new style — use updated char object
-        const updatedChar = { ...char, scheduleStyle: style, emotionConfig: nextEmotion };
-        if (!isScheduleFeatureOn(updatedChar)) return;
-        setIsScheduleGenerating(true);
-        try {
-            const result = await generateDailyScheduleForChar(updatedChar, userProfile, apiConfig, true);
-            if (result) setScheduleData(result);
-        } catch (e) {
-            console.error('[Schedule] Regeneration after style change failed:', e);
-        } finally {
-            setIsScheduleGenerating(false);
-        }
-    };
-
-    // 日程 / 情绪 buff 总开关
-    // 关闭：清空前台 scheduleData，同时清空可能已缓存的 buff 注入（防止继续污染下一轮 prompt）
-    // 打开：若还没生成今日日程，立即生成一次
-    const handleToggleScheduleFeature = async () => {
-        if (!char) return;
-        const nextEnabled = !isScheduleFeatureOn(char);
-        const patch: any = { scheduleFeatureEnabled: nextEnabled };
-        if (nextEnabled) {
-            // 与 handleScheduleStyleChange 对齐：开日程 = 同步开情绪/意识流。
-            // 旧逻辑下，新角色的 emotionConfig 从未初始化（undefined），
-            // 仅切总开关而不点风格时，emotionConfig?.enabled 始终落 false，
-            // 副 API 闸门 (isScheduleFeatureOn && emotionConfig?.enabled) 永远过不去。
-            patch.emotionConfig = { ...(char.emotionConfig || {}), enabled: true };
-        } else {
-            // 关闭时顺手把 buff 注入清空，避免上一轮残留继续注入
-            patch.buffInjection = '';
-            patch.activeBuffs = [];
-        }
-        updateCharacter(char.id, patch);
-        if (!nextEnabled) {
-            setScheduleData(null);
-            addToast('日程与情绪已关闭', 'info');
-            return;
-        }
-        addToast('日程与情绪已开启', 'success');
-        // 打开后立刻尝试生成（若今日未生成且已选风格）
-        const updatedChar = { ...char, ...patch };
-        if (updatedChar.scheduleStyle) {
-            const today = new Date().toISOString().split('T')[0];
-            const existing = await DB.getDailySchedule(char.id, today).catch(() => null);
-            if (existing) {
-                setScheduleData(existing);
-            } else {
-                generateDailySchedule(updatedChar, false);
-            }
-        }
-    };
-
-    // --- Modal Handlers ---
-
-    const handleAddCategory = async () => {
-        if (!newCategoryName.trim()) {
-             addToast('请输入分类名称', 'error');
-             return;
-        }
-        const newCat = { id: `cat-${Date.now()}`, name: newCategoryName.trim() };
-        await DB.saveEmojiCategory(newCat);
-        await loadEmojiData();
-        setActiveCategory(newCat.id);
-        setModalType('none');
-        setNewCategoryName('');
-        addToast('分类创建成功', 'success');
-    };
-
-    const handleImportEmoji = async () => {
-        if (!emojiImportText.trim()) return;
-        const lines = emojiImportText.split('\n');
-        const targetCatId = activeCategory === 'default' ? undefined : activeCategory;
-
-        for (const line of lines) {
-            const parts = line.split('--');
-            if (parts.length >= 2) {
-                const name = parts[0].trim();
-                const url = parts.slice(1).join('--').trim();
-                if (name && url) {
-                    await DB.saveEmoji(name, url, targetCatId);
-                }
-            }
-        }
-        await loadEmojiData();
-        setModalType('none');
-        setEmojiImportText('');
-        addToast('表情包导入成功', 'success');
-    };
-
-    const handleDeleteCategory = async () => {
-        if (!selectedCategory) return;
-        await DB.deleteEmojiCategory(selectedCategory.id);
-        await loadEmojiData();
-        setActiveCategory('default');
-        setModalType('none');
-        setSelectedCategory(null);
-        addToast('分类及包含表情已删除', 'success');
-    };
-
-    const handleSaveCategoryVisibility = async (categoryId: string, allowedCharacterIds: string[] | undefined) => {
-        const cat = categories.find(c => c.id === categoryId);
-        if (!cat) return;
-        await DB.saveEmojiCategory({ ...cat, allowedCharacterIds });
-        await loadEmojiData();
-        setSelectedCategory(null);
-        addToast(allowedCharacterIds ? `已设置 ${allowedCharacterIds.length} 个角色可见` : '已设为所有角色可见', 'success');
-    };
-
-    const handleSavePrompt = () => {
-        if (!editingPrompt || !editingPrompt.name.trim() || !editingPrompt.content.trim()) {
-            addToast('请填写完整', 'error');
-            return;
-        }
-        setArchivePrompts(prev => {
-            let next;
-            if (prev.some(p => p.id === editingPrompt.id)) {
-                next = prev.map(p => p.id === editingPrompt.id ? editingPrompt : p);
-            } else {
-                next = [...prev, editingPrompt];
-            }
-            const customOnly = next.filter(p => !p.id.startsWith('preset_'));
-            localStorage.setItem('chat_archive_prompts', JSON.stringify(customOnly));
-            return next;
-        });
-        setSelectedPromptId(editingPrompt.id);
-        setModalType('archive-settings');
-        setEditingPrompt(null);
-    };
-
-    const handleDeletePrompt = (id: string) => {
-        if (id.startsWith('preset_')) {
-            addToast('默认预设不可删除', 'error');
-            return;
-        }
-        setArchivePrompts(prev => {
-            const next = prev.filter(p => p.id !== id);
-            const customOnly = next.filter(p => !p.id.startsWith('preset_'));
-            localStorage.setItem('chat_archive_prompts', JSON.stringify(customOnly));
-            return next;
-        });
-        if (selectedPromptId === id) setSelectedPromptId('preset_rational');
-        addToast('预设已删除', 'success');
-    };
-
-    const createNewPrompt = () => {
-        setEditingPrompt({ id: `custom_${Date.now()}`, name: '新预设', content: DEFAULT_ARCHIVE_PROMPTS[0].content });
-        setModalType('prompt-editor');
-    };
-
-    const editSelectedPrompt = () => {
-        const p = archivePrompts.find(a => a.id === selectedPromptId);
-        if (!p) return;
-        if (p.id.startsWith('preset_')) {
-            setEditingPrompt({ id: `custom_${Date.now()}`, name: `${p.name} (Copy)`, content: p.content });
-        } else {
-            setEditingPrompt({ ...p });
-        }
-        setModalType('prompt-editor');
-    };
-
     const handleBgUpload = async (file: File) => {
         try {
             const dataUrl = await processImage(file, { skipCompression: true });
@@ -1245,7 +1088,6 @@ const Chat: React.FC = () => {
         updateCharacter(char.id, {
             contextLimit: settingsContextLimit,
             hideSystemLogs: settingsHideSysLogs,
-            htmlModeCustomPrompt: settingsHtmlModeCustomPrompt,
         } as any);
         setModalType('none');
         addToast('设置已保存', 'success');
@@ -2037,7 +1879,6 @@ const Chat: React.FC = () => {
 
              <ChatModals
                 modalType={modalType} setModalType={setModalType}
-                transferAmt={transferAmt} setTransferAmt={setTransferAmt}
                 emojiImportText={emojiImportText} setEmojiImportText={setEmojiImportText}
                 settingsContextLimit={settingsContextLimit} setSettingsContextLimit={setSettingsContextLimit}
                 settingsHideSysLogs={settingsHideSysLogs} setSettingsHideSysLogs={setSettingsHideSysLogs}
@@ -2055,7 +1896,6 @@ const Chat: React.FC = () => {
                 newCategoryName={newCategoryName} setNewCategoryName={setNewCategoryName} onAddCategory={handleAddCategory}
                 selectedCategory={selectedCategory}
 
-                onTransfer={() => { if(transferAmt) handleSendText(`[转账]`, 'transfer', { amount: transferAmt }); setModalType('none'); }}
                 onImportEmoji={handleImportEmoji}
                 onSaveSettings={saveSettings} onBgUpload={handleBgUpload} onRemoveBg={() => updateCharacter(char.id, { chatBackground: undefined })}
                 onClearHistory={handleClearHistory} onArchive={handleFullArchive}
@@ -2071,26 +1911,13 @@ const Chat: React.FC = () => {
                 onSetTranslateSourceLang={(lang: string) => { setTranslateSourceLang(lang); localStorage.setItem(`chat_translate_source_lang_${activeCharacterId}`, lang); setShowingTargetIds(new Set()); }}
                 onSetTranslateLang={(lang: string) => { setTranslateTargetLang(lang); localStorage.setItem(`chat_translate_lang_${activeCharacterId}`, lang); setShowingTargetIds(new Set()); }}
                 xhsEnabled={!!char.xhsEnabled}
-                onToggleXhs={() => updateCharacter(char.id, { xhsEnabled: !char.xhsEnabled })}
-                htmlModeEnabled={!!(char as any).htmlModeEnabled}
-                onToggleHtmlMode={() => updateCharacter(char.id, { htmlModeEnabled: !((char as any).htmlModeEnabled) } as any)}
-                htmlModeCustomPrompt={settingsHtmlModeCustomPrompt}
-                setHtmlModeCustomPrompt={setSettingsHtmlModeCustomPrompt}
+                onToggleXhs={() => updateCharacter(char.id, { xhsEnabled: !char.xhsEnabled })}
                 chatVoiceEnabled={!!char.chatVoiceEnabled}
                 onToggleChatVoice={() => updateCharacter(char.id, { chatVoiceEnabled: !char.chatVoiceEnabled })}
                 chatVoiceLang={char.chatVoiceLang || ''}
                 onSetChatVoiceLang={(lang: string) => updateCharacter(char.id, { chatVoiceLang: lang })}
                 voiceAvailable={!!(char.voiceProfile?.voiceId || char.voiceProfile?.timberWeights?.length)}
                 onGenerateVoice={selectedMessage ? () => handleManualTts(selectedMessage) : undefined}
-                scheduleData={scheduleData}
-                isScheduleGenerating={isScheduleGenerating}
-                onScheduleEdit={handleScheduleEdit}
-                onScheduleDelete={handleScheduleDelete}
-                onScheduleReroll={() => generateDailySchedule(char, true)}
-                onScheduleCoverChange={handleScheduleCoverChange}
-                onScheduleStyleChange={handleScheduleStyleChange}
-                isScheduleFeatureEnabled={isScheduleFeatureOn(char)}
-                onToggleScheduleFeature={handleToggleScheduleFeature}
                 isMemoryPalaceEnabled={!!char.memoryPalaceEnabled}
                 isVectorizing={isVectorizing}
                 onForceVectorize={handleForceVectorize}
@@ -2418,7 +2245,6 @@ const Chat: React.FC = () => {
                     isProactiveActive={isProactiveActive}
                     mcdConfigured={mcdConfiguredFlag}
                     mcdActivated={mcdActivated}
-                    htmlModeEnabled={!!(char as any).htmlModeEnabled}
                     showThinkingChain={!!(char as any).showThinkingChain}
                     inputStyle={osTheme.chatInputStyle}
                     sendButtonStyle={osTheme.chatSendButtonStyle}
@@ -2477,8 +2303,6 @@ const Chat: React.FC = () => {
                     }}
                 />
             )}
-
-            {/* 情绪设置已嵌入日程 Modal（与日程强制同步开/关），不再单独渲染 */}
 
             {/* 🍔 麦当劳小程序 - MCP 数据流按钮驱动, 协同聊天走主 pipeline (完整人设/记忆/日程) */}
             <McdMiniApp

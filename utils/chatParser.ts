@@ -1,6 +1,5 @@
 
 import { DB } from './db';
-import { LocalNotifications } from '@capacitor/local-notifications';
 import { CharacterProfile, CharPlaylistSong } from '../types';
 
 export interface MusicActionSnapshot {
@@ -57,13 +56,6 @@ export const ChatParser = {
         if (content.includes('[[ACTION:POKE]]')) {
             await DB.saveMessage({ charId, role: 'assistant', type: 'interaction', content: '[戳一戳]' });
             content = content.replace('[[ACTION:POKE]]', '').trim();
-        }
-
-        // TRANSFER
-        const transferMatch = content.match(/\[\[ACTION:TRANSFER:(\d+)\]\]/);
-        if (transferMatch) {
-            await DB.saveMessage({ charId, role: 'assistant', type: 'transfer', content: '[转账]', metadata: { amount: transferMatch[1] } });
-            content = content.replace(transferMatch[0], '').trim();
         }
 
         // MUSIC_ACTION — char 对 user 正在听的歌表态（只处理第一次出现，每条消息最多一次插卡）
@@ -199,39 +191,12 @@ export const ChatParser = {
             content = content.replace(NEWS_CARD_GLOBAL_RE, '').trim();
         }
 
-        // ADD_EVENT
-        const eventMatch = content.match(/\[\[ACTION:ADD_EVENT\s*\|\s*(.*?)\s*\|\s*(.*?)\]\]/);
-        if (eventMatch) {
-            const title = eventMatch[1].trim();
-            const date = eventMatch[2].trim();
-            if (title && date) {
-                const anni: any = { id: `anni-${Date.now()}`, title: title, date: date, charId };
-                await DB.saveAnniversary(anni);
-                addToast(`${charName} 添加了新日程: ${title}`, 'success');
-                await DB.saveMessage({ charId, role: 'system', type: 'text', content: `[系统: ${charName} 新增了日程 "${title}" (${date})]` });
-            }
-            content = content.replace(eventMatch[0], '').trim();
-        }
-
-        // SCHEDULE
-        const scheduleRegex = /\[schedule_message \| (.*?) \| fixed \| (.*?)\]/g;
-        let match;
-        while ((match = scheduleRegex.exec(content)) !== null) {
-            const timeStr = match[1].trim();
-            const msgContent = match[2].trim();
-            const dueTime = new Date(timeStr).getTime();
-            if (!isNaN(dueTime) && dueTime > Date.now()) {
-                await DB.saveScheduledMessage({ id: `sched-${Date.now()}-${Math.random()}`, charId, content: msgContent, dueAt: dueTime, createdAt: Date.now() });
-                try {
-                    const hasPerm = await LocalNotifications.checkPermissions();
-                    if (hasPerm.display === 'granted') {
-                        await LocalNotifications.schedule({ notifications: [{ title: charName, body: msgContent, id: Math.floor(Math.random() * 100000), schedule: { at: new Date(dueTime) }, smallIcon: 'ic_stat_icon_config_sample' }] });
-                    }
-                } catch (e) { console.log("Notification schedule skipped (web mode)"); }
-                addToast(`${charName} 似乎打算一会儿找你...`, 'info');
-            }
-        }
-        content = content.replace(scheduleRegex, '').trim();
+        // Removed chat extras: keep old model tags from becoming visible or executing side effects.
+        content = content
+            .replace(/\[\[ACTION:TRANSFER:\d+\]\]/g, '')
+            .replace(/\[\[ACTION:ADD_EVENT\s*\|[\s\S]*?\]\]/g, '')
+            .replace(/\[schedule_message\s*\|[^\]]*\]/g, '')
+            .trim();
 
         // RECALL tag removal (handling done in main loop logic, but cleaning here just in case)
         content = content.replace(/\[\[RECALL:.*?\]\]/g, '').trim();

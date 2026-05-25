@@ -15,7 +15,6 @@
 import type { CharacterProfile, UserProfile, GroupProfile, Emoji, EmojiCategory, Message, RealtimeConfig, TranslationConfig } from '../types';
 import { ChatPrompts } from './chatPrompts';
 import { injectMemoryPalace } from './memoryPalace/pipeline';
-import { buildHtmlPrompt } from './htmlPrompt';
 import { buildThinkingChainPrompt } from './thinkingChainPrompt';
 import { buildMcdMiniAppContextBlock } from './mcdToolBridge';
 import { GRAY_SEAM_CHAT_PROTOCOL } from './graySeamPrompt';
@@ -130,7 +129,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
     const {
         char, userProfile, groups, emojis, categories, historyMsgs, contextLimit,
         realtimeConfig, innerState,
-        translationConfig, htmlMode, thinkingChain, mcdMiniSnap,
+        translationConfig, thinkingChain, mcdMiniSnap,
     } = input;
     const recentMsgsHint = input.recentMsgsHint ?? historyMsgs;
 
@@ -185,11 +184,7 @@ export async function buildChatRequestPayload(input: BuildChatPayloadInput): Pro
 </翻译>`;
     }
 
-    // ── 5. HTML 卡片模式 ─────────────────────────────────
-    const htmlActive = !!htmlMode?.enabled;
-    if (htmlActive) {
-        systemPrompt += `\n\n${buildHtmlPrompt(htmlMode?.customPrompt)}`;
-    }
+    const htmlActive = false;
 
     // ── 6. 思考链提示词 ───────────────────────────────────
     const thinkingActive = !!thinkingChain?.enabled;

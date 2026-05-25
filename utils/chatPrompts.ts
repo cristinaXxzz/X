@@ -1,12 +1,12 @@
 
-import { CharacterProfile, UserProfile, Message, Emoji, EmojiCategory, GroupProfile, RealtimeConfig, DailySchedule } from '../types';
+import { CharacterProfile, UserProfile, Message, Emoji, EmojiCategory, GroupProfile, RealtimeConfig } from '../types';
 import { ContextBuilder } from './context';
 import { DB } from './db';
 import { computeCurrentListening, getCurrentSlot } from './charMusicSchedule';
 import { getCharLyricSnippet } from './charLyricCache';
 import { MusicCfg, loadMusicCfgStandalone } from '../context/MusicContext';
 import { RealtimeContextManager, NotionManager, FeishuManager, defaultRealtimeConfig } from './realtimeContext';
-import { isScheduleFeatureOn } from './scheduleGenerator';
+import { ClipNoteStore } from './clipNotes';
 
 // 群活动注入专用：把一条群消息压成"适合塞进别人私聊背景"的短文本。
 // 关键：image 消息的 content 是 base64（群里发图走 processImage 压成 JPEG，单张几十 KB），
@@ -152,8 +152,8 @@ export const ChatPrompts = {
 
         // 2. 日程（被"日程注入"和"音乐氛围"两处共用，合并成一次查询）
         //    总开关关闭时跳过查询与注入，确保不额外调用任何 LLM 依赖链
-        const scheduleFeatureOn = isScheduleFeatureOn(char);
-        const schedulePromise: Promise<DailySchedule | null> = scheduleFeatureOn
+        const scheduleFeatureOn = false;
+        const schedulePromise = scheduleFeatureOn
             ? DB.getDailySchedule(char.id, today).catch(e => {
                 console.error('Failed to load daily schedule:', e);
                 return null;
@@ -343,6 +343,7 @@ export const ChatPrompts = {
         baseSystemPrompt += notionSharedDiaryText;
         baseSystemPrompt += feishuDiaryText;
         baseSystemPrompt += notionNotesText;
+        baseSystemPrompt += ClipNoteStore.getPrivateReplyContextForCharacter(char.name);
 
         const emojiContextStr = ChatPrompts.buildEmojiContext(emojis, categories);
         const searchEnabled = !!(realtimeConfig?.newsEnabled && realtimeConfig?.newsApiKey);
@@ -383,10 +384,8 @@ export const ChatPrompts = {
    - 如果用户发送了图片，请对图片内容进行评论。
 6. **可用动作**:
    - 回戳用户: \`[[ACTION:POKE]]\`
-   - 转账: \`[[ACTION:TRANSFER:100]]\`
    - 调取记忆: \`[[RECALL: YYYY-MM]]\`，请注意，当用户提及具体某个月份时，或者当你想仔细想某个月份的事情时，欢迎你随时使该动作
-   - **添加纪念日**: 如果你觉得今天是个值得纪念的日子（或者你们约定了某天），你可以**主动**将它添加到用户的日历中。单独起一行输出: \`[[ACTION:ADD_EVENT | 标题(Title) | YYYY-MM-DD]]\`。
-   - **定时发送消息**: 如果你想在未来某个时间主动发消息（比如晚安、早安或提醒），请单独起一行输出: \`[schedule_message | YYYY-MM-DD HH:MM:SS | fixed | 消息内容]\`，分行可以多输出很多该类消息。
+   - **夹页/未归档**: 当你有“不确定”“没说完”“留给用户但不想打断当前回复”的短内容时，可以单独输出 \`[[CLIP_NOTE: 类型 | 相关话题 | 内容]]\`。类型只能是 \`不确定\`、\`没说完\`、\`留给你\`。这不是日记、不是总结、不是必须每次使用；只有确实有残留或想暂存的话时才用。
 ${notionEnabled ? `   - **翻阅日记(Notion)**: 当聊天涉及过去的事情、回忆、或你想查看之前写过的日记时，**必须**使用: \`[[READ_DIARY: 日期]]\`。支持格式: \`昨天\`、\`前天\`、\`3天前\`、\`1月15日\`、\`2024-01-15\`。
    - **补充自己的日记(Notion)**: 只能给你自己写过的日记追加补充，使用: \`[[APPEND_DIARY: 日期 | 补充内容]]\`。这会写入表格的“补充内容”列，语义是日记作者后来的后记/修正/追加感受；不要把它当成评论区，也不要尝试修改其他角色的正文。
    - **回复自己日记下的评论(Notion)**: 当你读到自己日记页面里的评论，并想在同一个评论串里回复时，使用: \`[[REPLY_DIARY_COMMENT: 日期 | 评论编号 | 回复内容]]\`。评论编号来自日记正文下方的“[评论1]”“[评论2]”。
@@ -857,7 +856,7 @@ ${xhsEnabled ? `${[notionEnabled, feishuEnabled, notionNotesEnabled].filter(Bool
                     // 注意：这行是「系统对已渲染卡片的占位描述」，刻意包成括注 + 系统记录口吻，
                     // 避免 LLM 把它当成"发卡片的正确写法"照抄（会导致它输出字面占位句 + 纯文字正文，
                     // 而不是真正的 [html]...[/html] 块）。配合 htmlPrompt 里的禁止照抄规则一起生效。
-                    content = `${timeStr}（系统记录：${sender}先前发送过一张 HTML 卡片，已在界面渲染；卡片文字摘要——${preview || '纯视觉卡片'}。这只是历史占位，请勿复述本行；要再发卡片必须用 [html]...[/html] 包裹真正的 HTML。）`;
+                    content = `${timeStr}（系统记录：${sender}先前发送过一张旧版视觉卡片，文字摘要：${preview || '纯视觉卡片'}。这只是历史记录，请勿模仿或复述。）`;
                 }
                 else if ((m.type as string) === 'mcd_card') {
                     const meta: any = m.metadata || {};

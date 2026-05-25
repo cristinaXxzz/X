@@ -1719,7 +1719,7 @@ const MessageItem = React.memo(({
         .replace(/\[(?:QU[OA]TE|引用)[：:][^\]]*\]/g, '')     // residual single-bracket quotes (incl. typos & Chinese)
         .replace(/\[回复\s*[""\u201C][^""\u201D]*?[""\u201D](?:\.{0,3})\]\s*[：:]?\s*/g, '')  // [回复 "content"]: format
         // Residual action/system tags that may have leaked through
-        .replace(/\[\[(?:ACTION|RECALL|SEARCH|DIARY|READ_DIARY|READ_SHARED_DIARY|APPEND_DIARY|REPLY_DIARY_COMMENT|COMMENT_DIARY|FS_DIARY|FS_READ_DIARY|SEND_EMOJI|DIARY_START|DIARY_END|FS_DIARY_START|FS_DIARY_END)[:\s][\s\S]*?\]\]/g, '')
+        .replace(/\[\[(?:ACTION|RECALL|SEARCH|DIARY|READ_DIARY|READ_SHARED_DIARY|APPEND_DIARY|REPLY_DIARY_COMMENT|COMMENT_DIARY|FS_DIARY|FS_READ_DIARY|SEND_EMOJI|CLIP_NOTE|DIARY_START|DIARY_END|FS_DIARY_START|FS_DIARY_END)[:\s][\s\S]*?\]\]/g, '')
         .replace(/\[schedule_message[^\]]*\]/g, '')
         .replace(/<[语語]音>[\s\S]*?<\/[语語]音>/g, '')  // strip <语音>...</语音> voice tags
         .replace(/^\s*---\s*$/gm, '')                // standalone --- lines

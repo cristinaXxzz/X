@@ -1,16 +1,12 @@
 
 import React, { useRef, useState } from 'react';
 import Modal from '../os/Modal';
-import { CharacterProfile, Message, EmojiCategory, DailySchedule, ScheduleSlot, ApiPreset, APIConfig } from '../../types';
-import ScheduleCard from '../schedule/ScheduleCard';
-import EmotionSettingsPanel from './EmotionSettingsPanel';
+import { CharacterProfile, Message, EmojiCategory, ApiPreset, APIConfig } from '../../types';
 
 interface ChatModalsProps {
     modalType: string;
     setModalType: (v: any) => void;
     // Data Props
-    transferAmt: string;
-    setTransferAmt: (v: string) => void;
     emojiImportText: string;
     setEmojiImportText: (v: string) => void;
     settingsContextLimit: number;
@@ -45,7 +41,6 @@ interface ChatModalsProps {
     allHistoryMessages?: Message[];
 
     // Handlers
-    onTransfer: () => void;
     onImportEmoji: () => void;
     onSaveSettings: () => void;
     onBgUpload: (file: File) => void;
@@ -79,11 +74,6 @@ interface ChatModalsProps {
     // XHS toggle
     xhsEnabled?: boolean;
     onToggleXhs?: () => void;
-    // HTML mode
-    htmlModeEnabled?: boolean;
-    onToggleHtmlMode?: () => void;
-    htmlModeCustomPrompt?: string;
-    setHtmlModeCustomPrompt?: (v: string) => void;
     // Voice TTS
     chatVoiceEnabled?: boolean;
     onToggleChatVoice?: () => void;
@@ -93,16 +83,7 @@ interface ChatModalsProps {
     onGenerateVoice?: () => void;
     voiceAvailable?: boolean; // true if char has voiceProfile configured
     // Schedule
-    scheduleData?: DailySchedule | null;
-    isScheduleGenerating?: boolean;
-    onScheduleEdit?: (index: number, slot: ScheduleSlot) => void;
-    onScheduleDelete?: (index: number) => void;
-    onScheduleReroll?: () => void;
-    onScheduleCoverChange?: (dataUrl: string) => void;
-    onScheduleStyleChange?: (style: 'lifestyle' | 'mindful') => void;
     // Schedule master toggle
-    isScheduleFeatureEnabled?: boolean;
-    onToggleScheduleFeature?: () => void;
     // Memory Palace force vectorize
     isMemoryPalaceEnabled?: boolean;
     isVectorizing?: boolean;
@@ -116,7 +97,6 @@ interface ChatModalsProps {
 
 const ChatModals: React.FC<ChatModalsProps> = ({
     modalType, setModalType,
-    transferAmt, setTransferAmt,
     emojiImportText, setEmojiImportText,
     settingsContextLimit, setSettingsContextLimit,
     settingsHideSysLogs, setSettingsHideSysLogs,
@@ -127,19 +107,15 @@ const ChatModals: React.FC<ChatModalsProps> = ({
     editingPrompt, setEditingPrompt, isSummarizing, archiveProgress,
     selectedMessage, selectedEmoji, selectedCategory, activeCharacter, messages,
     allHistoryMessages = [],
-    onTransfer, onImportEmoji, onSaveSettings,
+    onImportEmoji, onSaveSettings,
     onBgUpload, onRemoveBg, onClearHistory,
     onArchive, onCreatePrompt, onEditPrompt, onSavePrompt, onDeletePrompt,
     onSetHistoryStart, onJumpToMessageInChat, onEnterSelectionMode, onReplyMessage, onEditMessageStart, onConfirmEditMessage, onDeleteMessage, onCopyMessage, onDeleteEmoji, onDeleteCategory,
     allCharacters = [], onSaveCategoryVisibility,
     translationEnabled, onToggleTranslation, translateSourceLang, translateTargetLang, onSetTranslateSourceLang, onSetTranslateLang,
     xhsEnabled, onToggleXhs,
-    htmlModeEnabled, onToggleHtmlMode, htmlModeCustomPrompt, setHtmlModeCustomPrompt,
     chatVoiceEnabled, onToggleChatVoice, chatVoiceLang, onSetChatVoiceLang,
     onGenerateVoice, voiceAvailable,
-    scheduleData, isScheduleGenerating, onScheduleEdit, onScheduleDelete, onScheduleReroll, onScheduleCoverChange,
-    onScheduleStyleChange,
-    isScheduleFeatureEnabled, onToggleScheduleFeature,
     isMemoryPalaceEnabled, isVectorizing, onForceVectorize,
     apiPresets, onAddApiPreset, onSaveEmotion, onClearBuffs,
 }) => {
@@ -240,11 +216,6 @@ const ChatModals: React.FC<ChatModalsProps> = ({
 
     return (
         <>
-            <Modal 
-                isOpen={modalType === 'transfer'} title="Credits 转账" onClose={() => setModalType('none')}
-                footer={<><button onClick={() => setModalType('none')} className="flex-1 py-3 bg-slate-100 rounded-2xl">取消</button><button onClick={onTransfer} className="flex-1 py-3 bg-orange-500 text-white rounded-2xl">确认</button></>}
-            ><input type="number" value={transferAmt} onChange={e => setTransferAmt(e.target.value)} className="w-full bg-slate-100 rounded-2xl px-5 py-4 text-lg font-bold" autoFocus /></Modal>
-
             {/* New Category Modal */}
             <Modal 
                 isOpen={modalType === 'add-category'} title="新建表情分类" onClose={() => setModalType('none')}
@@ -363,32 +334,6 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                          <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
                              开启后，角色在聊天中可以搜索、浏览、发帖、评论小红书。需要在全局设置中配置 MCP 或 Cookie。
                          </p>
-                     </div>
-
-                     {/* HTML 模块模式 */}
-                     <div className="pt-2 border-t border-slate-100">
-                         <div className="flex justify-between items-center cursor-pointer" onClick={onToggleHtmlMode}>
-                             <label className="text-xs font-bold text-slate-400 uppercase pointer-events-none">HTML 模块模式</label>
-                             <div className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center ${htmlModeEnabled ? 'bg-fuchsia-500' : 'bg-slate-200'}`}>
-                                 <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${htmlModeEnabled ? 'translate-x-4' : ''}`}></div>
-                             </div>
-                         </div>
-                         <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                             开启后注入"用 [html]...[/html] 包裹的精美卡片"提示词，AI 会在合适场景输出邀请函 / 票据 / 通知等可视化模块。
-                             历史上下文里只保留剥离 HTML 后的文字摘要，不浪费 token。
-                         </p>
-                         {htmlModeEnabled && (
-                             <div className="mt-3">
-                                 <label className="text-[10px] font-bold text-slate-400 mb-1.5 block">自定义提示词补充（追加在内置提示词之后，不会覆盖）</label>
-                                 <textarea
-                                     value={htmlModeCustomPrompt || ''}
-                                     onChange={e => setHtmlModeCustomPrompt?.(e.target.value)}
-                                     placeholder="比如：偏好暖色调 / 默认风格走 minimal 杂志感 / 票据类必须含二维码占位…"
-                                     className="w-full h-28 bg-slate-50 rounded-2xl p-3 text-[12px] resize-none border border-slate-200 focus:outline-none focus:border-fuchsia-300"
-                                 />
-                                 <p className="text-[10px] text-slate-400 mt-1">留空则只使用内置提示词。</p>
-                             </div>
-                         )}
                      </div>
 
                      {/* Voice TTS */}
@@ -801,104 +746,6 @@ const ChatModals: React.FC<ChatModalsProps> = ({
                 />
             </Modal>
 
-            {/* Schedule Modal */}
-            <Modal
-                isOpen={modalType === 'schedule'} title={`${activeCharacter?.name || '角色'}の日程`} onClose={() => setModalType('none')}
-            >
-                <div className="max-h-[70vh] overflow-y-auto -mx-2 px-2">
-                    {/* 总开关：关闭时不调副 API、不生成日程、不注入情绪 buff */}
-                    {onToggleScheduleFeature && (
-                        <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-3">
-                            <div className="flex items-center justify-between">
-                                <div className="flex-1 min-w-0 pr-3">
-                                    <p className="text-xs font-bold text-slate-700">日程与情绪 Buff</p>
-                                    <p className="text-[10px] text-slate-500 leading-relaxed mt-0.5">
-                                        {isScheduleFeatureEnabled
-                                            ? '已开启：会调用副 API 生成今日日程，并在对话中评估情绪 buff。'
-                                            : '已关闭：不调副 API，不生成日程，不注入情绪 buff。'}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={onToggleScheduleFeature}
-                                    aria-label="切换日程与情绪总开关"
-                                    className={`w-10 h-6 rounded-full p-1 transition-colors flex items-center flex-shrink-0 ${isScheduleFeatureEnabled ? 'bg-primary' : 'bg-slate-300'}`}
-                                >
-                                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${isScheduleFeatureEnabled ? 'translate-x-4' : ''}`}></div>
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {isScheduleFeatureEnabled && (
-                        <>
-                            {/* Schedule Style Selector */}
-                            {onScheduleStyleChange && (
-                                <div className="mb-4">
-                                    {!activeCharacter?.scheduleStyle && (
-                                        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-3">
-                                            <p className="text-xs text-amber-700 font-bold mb-1">请选择日程风格</p>
-                                            <p className="text-[11px] text-amber-600 leading-relaxed">
-                                                不同风格会影响角色的内心独白生成方式。选择后会自动重新生成今日日程。
-                                            </p>
-                                        </div>
-                                    )}
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => onScheduleStyleChange('lifestyle')}
-                                            disabled={isScheduleGenerating}
-                                            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
-                                                (activeCharacter?.scheduleStyle || 'lifestyle') === 'lifestyle'
-                                                    ? 'bg-violet-100 border-violet-300 text-violet-700'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                                            }`}
-                                        >
-                                            <span className="block text-sm mb-0.5">生活系</span>
-                                            <span className="block text-[10px] opacity-70 font-normal">虚构日常 · 跑步做饭逛街</span>
-                                        </button>
-                                        <button
-                                            onClick={() => onScheduleStyleChange('mindful')}
-                                            disabled={isScheduleGenerating}
-                                            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
-                                                activeCharacter?.scheduleStyle === 'mindful'
-                                                    ? 'bg-teal-100 border-teal-300 text-teal-700'
-                                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                                            }`}
-                                        >
-                                            <span className="block text-sm mb-0.5">意识系</span>
-                                            <span className="block text-[10px] opacity-70 font-normal">真实内心 · 不虚构不说谎</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            <ScheduleCard
-                                schedule={scheduleData || null}
-                                character={activeCharacter}
-                                compact={false}
-                                onEdit={onScheduleEdit}
-                                onDelete={onScheduleDelete}
-                                onReroll={onScheduleReroll}
-                                onCoverImageChange={onScheduleCoverChange}
-                                isGenerating={isScheduleGenerating}
-                            />
-                            <p className="text-[10px] text-slate-400 text-center mt-3 leading-relaxed">
-                                点击日程项可编辑 · 长按可删除
-                            </p>
-
-                            {/* 情绪 / 意识流 API — 与日程强制同步 */}
-                            {activeCharacter && apiPresets && onAddApiPreset && onSaveEmotion && onClearBuffs && (
-                                <EmotionSettingsPanel
-                                    char={activeCharacter}
-                                    apiPresets={apiPresets}
-                                    addApiPreset={onAddApiPreset}
-                                    onSave={onSaveEmotion}
-                                    onClearBuffs={onClearBuffs}
-                                />
-                            )}
-                        </>
-                    )}
-                </div>
-            </Modal>
         </>
     );
 };

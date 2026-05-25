@@ -11,6 +11,7 @@ import { processGroupNewMessages, deleteGroupMemoriesByGroupId } from '../utils/
 import { processImage } from '../utils/file';
 import { GRAY_SEAM_GROUP_PROTOCOL, GRAY_SEAM_MEMORY_HINT } from '../utils/graySeamPrompt';
 import { DEFAULT_ARCHIVE_PROMPTS } from '../components/chat/ChatConstants';
+import { ClipNoteStore } from '../utils/clipNotes';
 import { UsersThree } from '@phosphor-icons/react';
 
 const TWEMOJI_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72';
@@ -167,6 +168,14 @@ const GroupMessageItem = React.memo(({
             
             <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[80%] ${selectionMode ? 'pointer-events-none' : ''}`}>
                 {!isUser && <span className="text-[10px] text-slate-400 ml-1 mb-1">{name}</span>}
+                {msg.replyTo && (
+                    <div className={`mb-1 max-w-full rounded-xl border px-3 py-1.5 text-[11px] leading-snug ${
+                        isUser ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white/70 text-slate-500'
+                    }`}>
+                        <div className="font-bold">@{msg.replyTo.name}</div>
+                        <div className="truncate opacity-80">{msg.replyTo.content}</div>
+                    </div>
+                )}
                 {renderContent()}
                 <span className="text-[9px] text-slate-300 mt-1 px-1">{timeStr}</span>
             </div>
@@ -208,6 +217,7 @@ const GroupChat: React.FC = () => {
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [modalType, setModalType] = useState<'none' | 'create' | 'settings' | 'transfer' | 'member_select' | 'message-options' | 'edit-message'>('none');
     const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+    const [replyingTo, setReplyingTo] = useState<Message['replyTo'] | null>(null);
     const [editContent, setEditContent] = useState('');
     const [preserveContext, setPreserveContext] = useState(true);
     const [isSummarizing, setIsSummarizing] = useState(false);
@@ -346,6 +356,23 @@ const GroupChat: React.FC = () => {
         setModalType('none');
         setSelectedMessage(null);
         addToast('已复制到剪贴板', 'success');
+    };
+
+    const getMessageAuthorName = (msg: Message) => {
+        if (msg.role === 'user') return userProfile.name || '我';
+        return characters.find(c => c.id === msg.charId)?.name || '成员';
+    };
+
+    const handleReplyMessage = () => {
+        if (!selectedMessage) return;
+        const raw = String(selectedMessage.content || '');
+        setReplyingTo({
+            id: selectedMessage.id,
+            name: getMessageAuthorName(selectedMessage),
+            content: raw.length > 80 ? `${raw.slice(0, 80)}...` : raw,
+        });
+        setModalType('none');
+        setSelectedMessage(null);
     };
 
     const handleEnterSelectionMode = () => {
@@ -727,7 +754,8 @@ ${logText.substring(0, 12000)}`;
             role: 'user' as const,
             type,
             content,
-            metadata
+            metadata,
+            ...(type === 'text' && replyingTo ? { replyTo: replyingTo } : {})
         };
 
         await DB.saveMessage(newMessage);
@@ -742,6 +770,7 @@ ${logText.substring(0, 12000)}`;
             setShowEmojiPicker(false);
         }
         setInput('');
+        setReplyingTo(null);
 
         // NOTE: No auto-trigger. User must click lightning button.
     };
@@ -820,6 +849,7 @@ ${groupMembers.map(m => `- ${m.name} (ID: ${m.id})：${m.description || '暂无�
                     .slice(-10)
                     .map(m => `[${m.role === 'user' ? '用户' : '我'}]: ${String(m.content).substring(0, 50)}`)
                     .join('\n');
+                const clipNoteReplyContext = ClipNoteStore.getPrivateReplyContextForCharacter(member.name);
 
                 roleContexts[member.id] = `${schedulerContext}
 
@@ -833,6 +863,8 @@ ${coreContext}
 - 如果私聊空窗期显示“刚刚”或“几小时前”，不要在群里说“好久不见”。
 - 最近私聊摘要只作为背景，不要在群聊里直接复述：
 ${recentPrivate || '(暂无私聊)'}
+
+${clipNoteReplyContext}
 
 重要边界：
 - 你只能使用自己的角色档案和自己的私聊背景。
@@ -887,7 +919,8 @@ ${recentPrivate || '(暂无私聊)'}
 
                 if (m.type === 'text' && isNonSemanticBubble(content)) return '';
 
-                return `${name}: ${content}`;
+                const replyPrefix = m.replyTo ? `↪ ${m.replyTo.name}: ${normalizeGeneratedBubble(m.replyTo.content).slice(0, 80)}\n` : '';
+                return `${name}: ${replyPrefix}${content}`;
             }).filter(Boolean).join('\n');
 
             let visibleMessages: Message[] = [...currentMsgs];
@@ -1456,6 +1489,12 @@ ${emojiContextStr}
         );
     }
 
+    const activeGroupMembers = activeGroup ? characters.filter(c => activeGroup.members.includes(c.id)) : [];
+    const insertMention = (name: string) => {
+        const suffix = input && !/\s$/.test(input) ? ' ' : '';
+        setInput(`${input}${suffix}@${name} `);
+    };
+
     // CHAT VIEW
     return (
         <div className="h-full w-full bg-[#f0f4f8] flex flex-col font-sans relative">
@@ -1601,6 +1640,33 @@ ${emojiContextStr}
                         </button>
                     </div>
                 ) : (
+                    <>
+                    {replyingTo && (
+                        <div className="mx-2 mt-2 rounded-2xl border border-violet-100 bg-white px-3 py-2 text-xs text-slate-500 shadow-sm">
+                            <div className="flex items-center gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-bold text-violet-600">回复 @{replyingTo.name}</div>
+                                    <div className="truncate">{replyingTo.content}</div>
+                                </div>
+                                <button onClick={() => setReplyingTo(null)} className="h-8 w-8 rounded-full bg-slate-100 text-slate-400 active:scale-95">
+                                    ×
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {activeGroupMembers.length > 0 && (
+                        <div className="px-2 pt-2 flex gap-2 overflow-x-auto no-scrollbar">
+                            {activeGroupMembers.map(member => (
+                                <button
+                                    key={member.id}
+                                    onClick={() => insertMention(member.name)}
+                                    className="shrink-0 h-8 rounded-full bg-white border border-slate-200 px-3 text-xs font-bold text-slate-500 active:scale-95"
+                                >
+                                    @{member.name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <div className="p-2 flex items-end gap-2">
                         {/* Plus / Actions Button */}
                         <button 
@@ -1642,6 +1708,7 @@ ${emojiContextStr}
                             <div className="w-2"></div>
                         )}
                     </div>
+                    </>
                 )}
 
                 {/* --- Action Drawer --- */}
@@ -1817,6 +1884,9 @@ ${emojiContextStr}
             {/* Message Options Modal */}
             <Modal isOpen={modalType === 'message-options'} title="消息操作" onClose={() => { setModalType('none'); setSelectedMessage(null); }}>
                 <div className="space-y-3">
+                    <button onClick={handleReplyMessage} className="w-full py-3 bg-violet-50 text-violet-600 font-medium rounded-2xl active:bg-violet-100 transition-colors flex items-center justify-center gap-2">
+                        回复这条
+                    </button>
                     <button onClick={handleEnterSelectionMode} className="w-full py-3 bg-slate-50 text-slate-700 font-medium rounded-2xl active:bg-slate-100 transition-colors flex items-center justify-center gap-2">
                         多选 / 批量删除
                     </button>

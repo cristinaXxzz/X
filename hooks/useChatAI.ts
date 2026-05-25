@@ -16,14 +16,13 @@ import { processNewMessages, mergePalaceFragmentsIntoMemories } from '../utils/m
 import { incrementDigestRound, runCognitiveDigestion, detectPersonalityStyle } from '../utils/memoryPalace';
 // evolveFlowNarrative 保留为低频深刷新备用，日常意识流由副 API 的情绪评估同轮产出（innerState 字段）
 // import { evolveFlowNarrative } from '../utils/scheduleGenerator';
-import { isScheduleFeatureOn } from '../utils/scheduleGenerator';
 import type { DigestResult } from '../utils/memoryPalace';
 // 麦当劳: useChatAI 现在只读 McdMiniApp 当前快照注入 system prompt + 给 LLM 一个
 // UI 钩子工具 propose_cart_items。MCP 实际调用都在 McdMiniApp 组件内做, useChatAI
 // 不再 import callMcdTool / normalizeMcdToolName / isMcdConfigured / 旧 prompt。
 import { MCD_PROPOSE_TOOL, autoFixProposalCodesByName } from '../utils/mcdToolBridge';
-import { extractHtmlBlocks } from '../utils/htmlPrompt';
 import { buildChatRequestPayload } from '../utils/chatRequestPayload';
+import { ClipNoteStore, parseClipNoteParts, CLIP_NOTE_TYPE_LABELS } from '../utils/clipNotes';
 import {
     isInstantConfigReady,
     sendInstantPushAndAwaitReply,
@@ -710,7 +709,7 @@ export const useChatAI = ({
                 isListeningTogether: !!(music.current && music.playing && music.listeningTogetherWith.includes(char.id)),
                 musicCfg: music.cfg,
                 translationConfig,
-                htmlMode: { enabled: !!(char as any).htmlModeEnabled, customPrompt: (char as any).htmlModeCustomPrompt },
+                htmlMode: { enabled: false },
                 thinkingChain: { enabled: !!(char as any).showThinkingChain, customPrompt: (char as any).thinkingChainCustomPrompt },
                 mcdMiniSnap: mcdMiniOpen ? mcdMiniSnap : undefined,
             }));
@@ -730,24 +729,6 @@ export const useChatAI = ({
 
             // Save for dev debug viewer
             setLastSystemPrompt(systemPrompt);
-
-            // 3. Fire-and-forget emotion evaluation in parallel with main API call
-            //    直接复用已 build 好的 systemPrompt 和 cleanedApiMessages，确保情绪评估和主 API 看到的上下文完全一致
-            //    情绪评估同时产出 innerState（意识流独白），注入下一轮 system prompt
-            //    未单独配置情绪 API 时，回退到主 apiConfig（与记忆宫殿副 API 完全独立）
-            if (isScheduleFeatureOn(char) && char.emotionConfig?.enabled) {
-                const emotionApi = (char.emotionConfig.api?.baseUrl)
-                    ? char.emotionConfig.api
-                    : { baseUrl: apiConfig.baseUrl, apiKey: apiConfig.apiKey, model: apiConfig.model };
-                setEmotionStatus('evaluating');
-                evaluateEmotionBackground(char, userProfile, systemPrompt, cleanedApiMessages, emotionApi)
-                    .then((innerState) => {
-                        if (innerState) setEvolvedNarrative(innerState);
-                    })
-                    .finally(() => {
-                        setEmotionStatus('');
-                    });
-            }
 
             // 发送前汇总计时
             const perfPreApi = Math.round(performance.now() - perfSendT0);
@@ -2509,7 +2490,30 @@ export const useChatAI = ({
             }
             aiContent = aiContent.replace(/\[\[XHS_POST:.*?\]\]/gs, '').trim();
 
-            // 6. Parse Actions (Poke, Transfer, Schedule, Music, etc.)
+            const clipNoteMatches = Array.from(aiContent.matchAll(/\[\[CLIP_NOTE:\s*([\s\S]*?)\]\]/g));
+            if (clipNoteMatches.length > 0) {
+                let savedCount = 0;
+                for (const match of clipNoteMatches) {
+                    const parsed = parseClipNoteParts(match[1] || '');
+                    if (!parsed || !parsed.content.trim()) continue;
+                    const note = ClipNoteStore.create({
+                        characterName: char.name,
+                        type: parsed.type,
+                        relatedTopic: parsed.relatedTopic,
+                        content: parsed.content,
+                    });
+                    if (note) savedCount += 1;
+                }
+                if (savedCount > 0) {
+                    const label = savedCount === 1
+                        ? CLIP_NOTE_TYPE_LABELS[parseClipNoteParts(clipNoteMatches[0][1] || '')?.type || 'uncertain']
+                        : `${savedCount} 张`;
+                    addToast(`已保存夹页：${label}`, 'success');
+                }
+                aiContent = aiContent.replace(/\[\[CLIP_NOTE:\s*[\s\S]*?\]\]/g, '').trim();
+            }
+
+            // 6. Parse model action tags.
             aiContent = await ChatParser.parseAndExecuteActions(aiContent, char.id, char.name, addToast, {
                 getListeningSnapshot: () => {
                     if (!music.current) return null;
@@ -2635,35 +2639,7 @@ export const useChatAI = ({
                 return merged;
             };
 
-            // 6.5 HTML 卡片：把 [html]...[/html] 块抽出来落库为 html_card 消息，
-            //     content 只存"剥离 HTML 后的纯文字摘要"（注入历史 / 归档 都用这个），
-            //     原始 HTML 放在 metadata.htmlSource，供 MessageItem 沙盒渲染。
-            //     这样既不污染上下文 token，也保留了可视化卡片。
-            //     注意：在 quote/sanitize 之前抽，避免 sanitize 把 HTML 内容当垃圾去掉。
-            if ((char as any).htmlModeEnabled && /\[html\]/i.test(aiContent)) {
-                const { blocks, cleanedContent } = extractHtmlBlocks(aiContent);
-                for (const blk of blocks) {
-                    try {
-                        await DB.saveMessage({
-                            charId: char.id,
-                            role: 'assistant',
-                            type: 'html_card',
-                            content: blk.textPreview ? `[HTML卡片] ${blk.textPreview}` : '[HTML卡片]',
-                            metadata: mergeAssistantMeta({
-                                htmlSource: blk.html,
-                                htmlTextPreview: blk.textPreview,
-                                ...(mcdInheritMeta || {}),
-                            }),
-                        } as any);
-                        setMessages(await DB.getRecentMessagesByCharId(char.id, 200));
-                        // 给视觉留一点呼吸感
-                        await new Promise(r => setTimeout(r, 300));
-                    } catch (e) {
-                        console.error('[HTML] 落库 html_card 失败', e);
-                    }
-                }
-                aiContent = cleanedContent;
-            }
+            aiContent = aiContent.replace(/\[html\][\s\S]*?\[\/html\]/gi, '').trim();
 
             // 7. Handle Quote/Reply Logic (Robust: handles [[QUOTE:...]], [QUOTE:...], typos like QUATE/QOUTE, Chinese 引用, and [回复 "..."] format)
             const QUOTE_RE_DOUBLE = /\[\[(?:QU[OA]TE|引用)[：:]\s*([\s\S]*?)\]\]/;

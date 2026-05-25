@@ -5,8 +5,10 @@ import PhoneShell from './PhoneShell';
 import Chat from '../apps/Chat';
 import Character from '../apps/Character';
 import GroupChat from '../apps/GroupChat';
+import ClipNotesApp from '../apps/ClipNotesApp';
+import DiscussionApp from '../apps/DiscussionApp';
+import FanficApp from '../apps/FanficApp';
 import MusicApp from '../apps/MusicApp';
-import SongwritingApp from '../apps/SongwritingApp';
 import MemoryPalaceApp from '../apps/MemoryPalaceApp';
 import WorldbookApp from '../apps/WorldbookApp';
 import Settings from '../apps/Settings';
@@ -16,8 +18,10 @@ type DesktopTab =
   | 'chat'
   | 'character'
   | 'group'
+  | 'discussion'
+  | 'fanfic'
+  | 'clip'
   | 'music'
-  | 'songwriting'
   | 'memory'
   | 'worldbook'
   | 'settings'
@@ -38,13 +42,15 @@ const navGroups: Array<{
       { id: 'chat', label: '私聊', desc: '角色对话' },
       { id: 'character', label: '角色', desc: '设定 / 模型 / 记忆' },
       { id: 'group', label: '群聊', desc: '多角色互动' },
+      { id: 'discussion', label: '讨论', desc: '议题 / 长段观点' },
+      { id: 'fanfic', label: '片场', desc: '同人片段 / 共写' },
+      { id: 'clip', label: '夹页', desc: '没说完 / 不确定 / 留给你' },
     ],
   },
   {
     title: '内容',
     items: [
       { id: 'music', label: '音乐', desc: '音乐人格 / 歌单' },
-      { id: 'songwriting', label: '写歌', desc: '歌词 / 编曲' },
       { id: 'memory', label: '记忆宫殿', desc: '记忆整理' },
       { id: 'worldbook', label: '世界书', desc: '世界观资料' },
     ],
@@ -74,10 +80,14 @@ const DesktopShell: React.FC = () => {
         return <Character />;
       case 'group':
         return <GroupChat />;
+      case 'discussion':
+        return <DiscussionApp />;
+      case 'fanfic':
+        return <FanficApp />;
+      case 'clip':
+        return <ClipNotesApp />;
       case 'music':
         return <MusicApp />;
-      case 'songwriting':
-        return <SongwritingApp />;
       case 'memory':
         return <MemoryPalaceApp />;
       case 'worldbook':
@@ -101,7 +111,7 @@ const DesktopShell: React.FC = () => {
 
                 <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-500">
                   这里是专门给电脑使用的新界面。手机端仍然保留原来的 PhoneShell。
-                  旧功能不会删除；没有完全电脑化的功能，可以从「手机模式」进入。
+                  没有接入电脑端的功能，可以从「手机模式」进入。
                 </p>
               </section>
 
@@ -123,7 +133,7 @@ const DesktopShell: React.FC = () => {
                       </div>
 
                       <div className="mt-6 text-xs font-bold text-violet-400 opacity-0 transition group-hover:opacity-100">
-                        打开 →
+                        打开
                       </div>
                     </button>
                   ))}
@@ -150,9 +160,9 @@ const DesktopShell: React.FC = () => {
                   </div>
 
                   <div className="rounded-3xl bg-white/80 p-5">
-                    <div className="font-bold text-slate-900">旧功能保留</div>
+                    <div className="font-bold text-slate-900">功能按需保留</div>
                     <p className="mt-2 leading-6 text-slate-400">
-                      没接入电脑端的功能，可以先从手机模式继续使用。
+                      保留核心功能，减少不再使用的模块负担。
                     </p>
                   </div>
                 </div>
@@ -213,7 +223,7 @@ const DesktopShell: React.FC = () => {
                 className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-white/20 hover:text-white"
                 title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
               >
-                {sidebarCollapsed ? '»' : '«'}
+                {sidebarCollapsed ? '>' : '<'}
               </button>
             </div>
           </div>
@@ -237,7 +247,7 @@ const DesktopShell: React.FC = () => {
                           ? 'bg-white text-slate-950 shadow-sm'
                           : 'text-slate-300 hover:bg-white/10 hover:text-white'
                       }`}
-                      title={sidebarCollapsed ? `${item.label}：${item.desc}` : item.label}
+                      title={sidebarCollapsed ? `${item.label}: ${item.desc}` : item.label}
                     >
                       <div className="text-sm font-black">
                         {sidebarCollapsed ? item.label.slice(0, 1) : item.label}
