@@ -258,11 +258,6 @@ interface OSContextType {
   registerBackHandler: (handler: () => boolean) => () => void; // Returns unregister function
   handleBack: () => void;
 
-  // Call Suspend
-  suspendedCall: { charId: string; charName: string; charAvatar?: string; startedAt: number; bubbles?: any[]; sessionId?: string; elapsedSeconds?: number; voiceLang?: string } | null;
-  suspendCall: (info: { charId: string; charName: string; charAvatar?: string; startedAt: number; bubbles?: any[]; sessionId?: string; elapsedSeconds?: number; voiceLang?: string }) => void;
-  resumeCall: () => void;
-  clearSuspendedCall: () => void;
 }
 
 export const DEFAULT_WALLPAPER = 'linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)';
@@ -587,9 +582,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   
   // Back Handler Ref
   const backHandlerRef = useRef<(() => boolean) | null>(null);
-
-  // Call Suspend
-  const [suspendedCall, setSuspendedCall] = useState<{ charId: string; charName: string; charAvatar?: string; startedAt: number; bubbles?: any[]; sessionId?: string; elapsedSeconds?: number; voiceLang?: string } | null>(null);
 
   const sendProactiveNativeNotification = useCallback(async (charId: string, charName: string, body: string) => {
       if (!Capacitor.isNativePlatform()) return;
@@ -2974,17 +2966,6 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const closeApp = () => setActiveApp(AppID.Launcher);
   const unlock = () => setIsLocked(false);
 
-  const suspendCall = (info: { charId: string; charName: string; charAvatar?: string; startedAt: number; bubbles?: any[]; sessionId?: string; elapsedSeconds?: number; voiceLang?: string }) => {
-    setSuspendedCall(info);
-    setActiveApp(AppID.Launcher);
-  };
-  const resumeCall = () => {
-    setActiveApp(AppID.Call);
-  };
-  const clearSuspendedCall = () => {
-    setSuspendedCall(null);
-  };
-
   // --- Back Handler Logic ---
   const registerBackHandler = useCallback((handler: () => boolean) => {
       backHandlerRef.current = handler;
@@ -3088,11 +3069,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     systemLogs,
     clearLogs,
     registerBackHandler,
-    handleBack,
-    suspendedCall,
-    suspendCall,
-    resumeCall,
-    clearSuspendedCall
+    handleBack
   };
 
   return (

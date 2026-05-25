@@ -216,7 +216,6 @@ const GlobalMiniPlayer: React.FC = () => {
   if (!current) return null;
   if (activeApp === AppID.Music) return null;
   if (activeApp === AppID.Launcher) return null; // Launcher 的 dock 够用了
-  if (activeApp === AppID.Call) return null;     // 通话中不打扰
   if (hidden) return null;
 
   const pct = duration > 0 ? (progress / duration) * 100 : 0;

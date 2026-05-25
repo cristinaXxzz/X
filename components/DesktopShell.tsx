@@ -9,7 +9,6 @@ import MusicApp from '../apps/MusicApp';
 import SongwritingApp from '../apps/SongwritingApp';
 import MemoryPalaceApp from '../apps/MemoryPalaceApp';
 import WorldbookApp from '../apps/WorldbookApp';
-import JournalApp from '../apps/JournalApp';
 import Settings from '../apps/Settings';
 
 type DesktopTab =
@@ -21,7 +20,6 @@ type DesktopTab =
   | 'songwriting'
   | 'memory'
   | 'worldbook'
-  | 'journal'
   | 'settings'
   | 'phone';
 
@@ -49,7 +47,6 @@ const navGroups: Array<{
       { id: 'songwriting', label: '写歌', desc: '歌词 / 编曲' },
       { id: 'memory', label: '记忆宫殿', desc: '记忆整理' },
       { id: 'worldbook', label: '世界书', desc: '世界观资料' },
-      { id: 'journal', label: '日记', desc: '记录与回顾' },
     ],
   },
   {
@@ -85,8 +82,6 @@ const DesktopShell: React.FC = () => {
         return <MemoryPalaceApp />;
       case 'worldbook':
         return <WorldbookApp />;
-      case 'journal':
-        return <JournalApp />;
       case 'settings':
         return <Settings />;
       case 'phone':

@@ -3,8 +3,7 @@ import { useOS } from '../context/OSContext';
 import { INSTALLED_APPS, DOCK_APPS } from '../constants';
 import AppIcon from '../components/os/AppIcon';
 import { DB } from '../utils/db';
-import { CharacterProfile, Anniversary, AppID, DailySchedule } from '../types';
-import { ScheduleHomeWidget, ScheduleFullscreenViewer } from '../components/schedule/ScheduleHomeWidget';
+import { CharacterProfile, Anniversary, AppID } from '../types';
 import NowPlayingSquareWidget from '../components/os/NowPlayingSquareWidget';
 
 // --- Isolated Components to prevent full re-renders ---
@@ -357,10 +356,6 @@ const Launcher: React.FC = () => {
   const [widgetChar, setWidgetChar] = useState<CharacterProfile | null>(null);
   const [lastMessage, setLastMessage] = useState<string>('');
   const [anniversaries, setAnniversaries] = useState<Anniversary[]>([]);
-  const [scheduleData, setScheduleData] = useState<DailySchedule | null>(null);
-  const [scheduleCharId, setScheduleCharId] = useState<string | null>(null);
-  const [scheduleViewerOpen, setScheduleViewerOpen] = useState(false);
-
   const [activePageIndex, setActivePageIndex] = useState(_lastPageIndex);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -452,19 +447,6 @@ const Launcher: React.FC = () => {
           loadData();
       }
   }, [activeCharacterId, lastMsgTimestamp, isDataLoaded, characters]); // Trigger on characters change
-
-  // Schedule widget data loading (shown below SpecialMoments icon)
-  const scheduleChar = useMemo(() => {
-      if (!characters || characters.length === 0) return null;
-      if (scheduleCharId) return characters.find(c => c.id === scheduleCharId) || characters[0];
-      return characters.find(c => c.id === activeCharacterId) || characters[0];
-  }, [characters, scheduleCharId, activeCharacterId]);
-
-  useEffect(() => {
-      if (!scheduleChar || !isDataLoaded) return;
-      const today = new Date().toISOString().split('T')[0];
-      DB.getDailySchedule(scheduleChar.id, today).then(s => setScheduleData(s)).catch(() => {});
-  }, [scheduleChar, isDataLoaded]);
 
   // Restore scroll position BEFORE paint to avoid visible flash/slide
   useLayoutEffect(() => {
@@ -594,16 +576,8 @@ const Launcher: React.FC = () => {
                         </div>
                       </>
                   ) : idx === 1 ? (
-                      // Page 2: Schedule 4x2 widget on top + Pinwheel (Music / 2x2 icons / 2x2 icons / Image) below
+                      // Page 2: Pinwheel (Music / 2x2 icons / 2x2 icons / Image)
                       <div className="flex-1 min-h-0 w-full flex flex-col gap-5 justify-center">
-                          {scheduleChar && (
-                              <ScheduleHomeWidget
-                                  schedule={scheduleData}
-                                  character={scheduleChar}
-                                  contentColor={contentColor}
-                                  onOpen={() => setScheduleViewerOpen(true)}
-                              />
-                          )}
                           <div className="grid grid-cols-2 gap-x-3 gap-y-5 w-full">
                               <div className="aspect-square min-w-0">
                                   <NowPlayingSquareWidget contentColor={contentColor} />
@@ -729,17 +703,6 @@ const Launcher: React.FC = () => {
                ))}
            </div>
       </div>
-
-      <ScheduleFullscreenViewer
-          open={scheduleViewerOpen}
-          onClose={() => setScheduleViewerOpen(false)}
-          characters={characters}
-          activeCharId={scheduleChar?.id || null}
-          onSwitchCharacter={(id) => setScheduleCharId(id)}
-          schedule={scheduleData}
-          activeCharacter={scheduleChar}
-          contentColor={contentColor}
-      />
 
     </div>
   );

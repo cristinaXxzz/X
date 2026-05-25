@@ -12,33 +12,23 @@ import GroupChat from '../apps/GroupChat';
 import ThemeMaker from '../apps/ThemeMaker';
 import Appearance from '../apps/Appearance';
 import Gallery from '../apps/Gallery'; 
-import DateApp from '../apps/DateApp'; 
 import UserApp from '../apps/UserApp';
-import JournalApp from '../apps/JournalApp'; 
-import ScheduleApp from '../apps/ScheduleApp'; 
-import RoomApp from '../apps/RoomApp'; 
-import CheckPhone from '../apps/CheckPhone';
 import SocialApp from '../apps/SocialApp'; 
 import StudyApp from '../apps/StudyApp'; 
 import FAQApp from '../apps/FAQApp'; 
-import GameApp from '../apps/GameApp'; 
 import WorldbookApp from '../apps/WorldbookApp';
 import NovelApp from '../apps/NovelApp'; 
-import BankApp from '../apps/BankApp';
 import XhsStockApp from '../apps/XhsStockApp';
 import XhsFreeRoamApp from '../apps/XhsFreeRoamApp';
 import BrowserApp from '../apps/BrowserApp';
 import SongwritingApp from '../apps/SongwritingApp';
 import MusicApp from '../apps/MusicApp';
-import CallApp from '../apps/CallApp';
 import VoiceDesignerApp from '../apps/VoiceDesignerApp';
 import GuidebookApp from '../apps/GuidebookApp';
-import LifeSimApp from '../apps/LifeSimApp';
 import MemoryPalaceApp from '../apps/MemoryPalaceApp';
 import HandbookApp from '../apps/HandbookApp';
 import QQBridge from '../apps/QQBridge';
 import HotNewsApp from '../apps/HotNewsApp';
-import { SpecialMomentsApp } from './ValentineEvent';
 import { Like520Controller, shouldShowLike520Popup } from './Like520Event';
 import { UpdateNotificationController, shouldShowUpdateNotification } from './UpdateNotificationEvent';
 import { AppID } from '../types';
@@ -207,7 +197,7 @@ const DisclaimerPopup: React.FC<{ onAccept: () => void }> = ({ onAccept }) => (
 );
 
 const PhoneShell: React.FC = () => {
-  const { theme, isLocked, unlock, activeApp, closeApp, openApp, virtualTime, isDataLoaded, toasts, unreadMessages, characters, handleBack, suspendedCall, resumeCall, activeCharacterId, errorDialog, dismissError } = useOS();
+  const { theme, isLocked, unlock, activeApp, closeApp, virtualTime, isDataLoaded, toasts, unreadMessages, characters, handleBack, activeCharacterId, errorDialog, dismissError } = useOS();
   const useIOSStandaloneLayout = isIOSStandaloneWebApp();
 
   // Disclaimer popup for first-time users
@@ -393,33 +383,23 @@ const PhoneShell: React.FC = () => {
       case AppID.ThemeMaker: return <ThemeMaker />;
       case AppID.Appearance: return <Appearance />;
       case AppID.Gallery: return <Gallery />;
-      case AppID.Date: return <DateApp />; 
       case AppID.User: return <UserApp />;
-      case AppID.Journal: return <JournalApp />; 
-      case AppID.Schedule: return <ScheduleApp />;
-      case AppID.Room: return <RoomApp />; 
-      case AppID.CheckPhone: return <CheckPhone />;
       case AppID.Social: return <SocialApp />;
       case AppID.Study: return <StudyApp />; 
       case AppID.FAQ: return <FAQApp />; 
-      case AppID.Game: return <GameApp />; 
       case AppID.Worldbook: return <WorldbookApp />;
       case AppID.Novel: return <NovelApp />; 
-      case AppID.Bank: return <BankApp />;
       case AppID.XhsStock: return <XhsStockApp />;
       case AppID.XhsFreeRoam: return <XhsFreeRoamApp />;
       case AppID.Browser: return <BrowserApp />;
       case AppID.Songwriting: return <SongwritingApp />;
       case AppID.Music: return <MusicApp />;
-      case AppID.Call: return <CallApp />;
       case AppID.VoiceDesigner: return <VoiceDesignerApp />;
       case AppID.Guidebook: return <GuidebookApp />;
-      case AppID.LifeSim: return <LifeSimApp />;
       case AppID.MemoryPalace: return <MemoryPalaceApp />;
       case AppID.Handbook: return <HandbookApp />;
       case AppID.QQBridge: return <QQBridge />;
       case AppID.HotNews: return <HotNewsApp />;
-      case AppID.SpecialMoments: return <SpecialMomentsApp />;
       case AppID.Launcher:
       default: return <Launcher />;
     }
@@ -465,18 +445,6 @@ const PhoneShell: React.FC = () => {
           {/* Overlays: Status Bar (Top) */}
           {!theme.hideStatusBar && <StatusBar />}
           
-          {/* Overlays: Suspended Call Bar */}
-          {suspendedCall && activeApp !== AppID.Call && (
-            <button
-              onClick={resumeCall}
-              className="absolute top-7 left-0 w-full z-[55] flex items-center justify-center gap-2 bg-emerald-500 text-white text-xs font-bold py-1.5 animate-pulse cursor-pointer active:bg-emerald-600 transition-colors"
-            >
-              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-              <span>通话中 · {suspendedCall.charName}</span>
-              <span className="opacity-70">点击返回</span>
-            </button>
-          )}
-
           {/* Overlays: Global Mini Player (when music is playing in background) */}
           <GlobalMiniPlayer />
 
