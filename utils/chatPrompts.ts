@@ -205,7 +205,7 @@ export const ChatPrompts = {
                     s += `${i + 1}. [${d.date}] ${d.title}\n`;
                     if (d.supplement?.trim()) {
                         const supplement = d.supplement.trim();
-                        s += `   补充/评论: ${supplement.length > 240 ? supplement.slice(0, 240) + '…' : supplement}\n`;
+                        s += `   作者补充: ${supplement.length > 240 ? supplement.slice(0, 240) + '…' : supplement}\n`;
                     }
                 });
                 s += `\n`;
@@ -228,7 +228,7 @@ export const ChatPrompts = {
                     s += `${i + 1}. [${d.date}] ${owner}: ${d.title}\n`;
                     if (d.supplement?.trim()) {
                         const supplement = d.supplement.trim();
-                        s += `   补充/评论: ${supplement.length > 160 ? supplement.slice(0, 160) + '…' : supplement}\n`;
+                        s += `   日记作者补充: ${supplement.length > 160 ? supplement.slice(0, 160) + '…' : supplement}\n`;
                     }
                 });
                 s += `\n`;
@@ -389,7 +389,7 @@ export const ChatPrompts = {
    - **添加纪念日**: 如果你觉得今天是个值得纪念的日子（或者你们约定了某天），你可以**主动**将它添加到用户的日历中。单独起一行输出: \`[[ACTION:ADD_EVENT | 标题(Title) | YYYY-MM-DD]]\`。
    - **定时发送消息**: 如果你想在未来某个时间主动发消息（比如晚安、早安或提醒），请单独起一行输出: \`[schedule_message | YYYY-MM-DD HH:MM:SS | fixed | 消息内容]\`，分行可以多输出很多该类消息。
 ${notionEnabled ? `   - **翻阅日记(Notion)**: 当聊天涉及过去的事情、回忆、或你想查看之前写过的日记时，**必须**使用: \`[[READ_DIARY: 日期]]\`。支持格式: \`昨天\`、\`前天\`、\`3天前\`、\`1月15日\`、\`2024-01-15\`。
-   - **补充自己的日记(Notion)**: 只能给你自己写过的日记追加补充，使用: \`[[APPEND_DIARY: 日期 | 补充内容]]\`。不要尝试修改其他角色的正文。
+   - **补充自己的日记(Notion)**: 只能给你自己写过的日记追加补充，使用: \`[[APPEND_DIARY: 日期 | 补充内容]]\`。这会写入表格的“补充内容”列，语义是日记作者后来的后记/修正/追加感受；不要把它当成评论区，也不要尝试修改其他角色的正文。
    - **回复自己日记下的评论(Notion)**: 当你读到自己日记页面里的评论，并想在同一个评论串里回复时，使用: \`[[REPLY_DIARY_COMMENT: 日期 | 评论编号 | 回复内容]]\`。评论编号来自日记正文下方的“[评论1]”“[评论2]”。
    - **阅读其他角色日记(Notion)**: 可以读取同一 Notion 日记库中其他角色的正文，使用: \`[[READ_SHARED_DIARY: 角色名 | 日期]]\`。这是读取，不是修改。
    - **评论其他角色日记(Notion)**: 你可以给同一 Notion 日记库里其他角色的日记留下页面评论，使用: \`[[COMMENT_DIARY: 角色名 | 日期 | 评论内容]]\`。这是评论，不是改正文。` : ''}${feishuEnabled ? `
@@ -471,7 +471,7 @@ ${notionEnabled ? `8. **📔 日记系统（你的私人 Notion 日记本）**:
    - \`[[READ_DIARY: 1月15日]]\` — 某月某日
 
    **✍️ 修改边界：只能改自己的日记**
-   - 如果你想给自己以前的日记补一句后记、修正、补充感受，使用 \`[[APPEND_DIARY: 日期 | 补充内容]]\`。
+   - 如果你想给自己以前的日记补一句后记、修正、补充感受，使用 \`[[APPEND_DIARY: 日期 | 补充内容]]\`；它写入“补充内容”列，只代表日记作者自己的追加，不是页面评论。
    - 这个动作只会查找你自己名下的日记，不能改其他角色的页面。
    - 如果你想回复自己日记下某条评论，先翻阅自己的日记；看到“[评论1]”这类编号后，使用 \`[[REPLY_DIARY_COMMENT: 日期 | 评论编号 | 回复内容]]\`。
    - 你可以读取其他角色写在同一 Notion 日记库里的正文：\`[[READ_SHARED_DIARY: 角色名 | 日期]]\`。

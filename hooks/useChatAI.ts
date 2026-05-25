@@ -1349,11 +1349,11 @@ export const useChatAI = ({
                             );
                             const target = findResult.entries[0];
                             if (findResult.success && target) {
-                                const result = await NotionManager.appendDiaryContent(
+                                const result = await NotionManager.appendDiarySupplementProperty(
                                     realtimeConfig.notionApiKey,
                                     target.id,
+                                    target.supplement,
                                     appendContent,
-                                    undefined,
                                     char.name
                                 );
                                 addToast(result.success ? `📔 ${char.name}补充了自己的日记` : `日记补充失败: ${result.message}`, result.success ? 'success' : 'error');
@@ -1476,19 +1476,6 @@ export const useChatAI = ({
                                     comment,
                                     char.name
                                 );
-                                if (result.success) {
-                                    const supplementResult = await NotionManager.appendDiarySupplementProperty(
-                                        realtimeConfig.notionApiKey,
-                                        target.id,
-                                        target.supplement,
-                                        comment,
-                                        char.name
-                                    );
-                                    if (!supplementResult.success) {
-                                        console.warn('💬 [CommentDiary] 评论成功，但补充列写入失败:', supplementResult.message);
-                                        addToast(`评论成功，但补充内容列写入失败: ${supplementResult.message}`, 'error');
-                                    }
-                                }
                                 addToast(result.success ? `💬 ${char.name}评论了${ownerName}的日记` : `日记评论失败: ${result.message}`, result.success ? 'success' : 'error');
                             } else {
                                 addToast(`${targetDate} 没找到 ${ownerName} 的日记`, 'info');
