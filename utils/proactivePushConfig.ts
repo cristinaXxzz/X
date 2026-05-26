@@ -21,8 +21,8 @@
 //   用户在 Settings → Instant Push 里生成；Proactive 和 Instant 共用同一份
 //   VAPID，避免两边互相 unsubscribe 抢同一个 pushManager 订阅。
 // ═══════════════════════════════════════════════════════════════════
-const LEGACY_WORKER_URL = 'https://noir2.cc.cd';
-const LEGACY_CLIENT_TOKEN = 'weqwqewqeqwdcsccagdgs32132';
+const LEGACY_WORKER_URL = '';
+const LEGACY_CLIENT_TOKEN = '';
 // ═══════════════════════════════════════════════════════════════════
 
 import { loadPushVapid, isPushVapidReady } from './pushVapid';
@@ -237,6 +237,11 @@ export async function registerScheduleOnWorker(charId: string, intervalMs: numbe
 export async function unregisterScheduleOnWorker(charId: string): Promise<boolean> {
   const cfg = loadPushConfig();
   if (!isPushConfigReady(cfg)) return false;
+
+  const ready = await ensureSubscribed();
+  if (!ready.ok) {
+    return { ok: false, reason: ready.reason || '订阅登记失败' };
+  }
 
   const reg = await navigator.serviceWorker?.ready?.catch(() => null);
   const sub = reg ? await reg.pushManager.getSubscription() : null;

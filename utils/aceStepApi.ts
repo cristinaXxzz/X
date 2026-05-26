@@ -18,7 +18,7 @@ import { DB } from './db';
 
 // ── Endpoint config ──
 // Same Cloudflare Worker domain that hosts /netease, /xhs, /webdav etc.
-const WORKER_BASE = 'https://sullymeow.ccwu.cc';
+const WORKER_BASE = 'https://sullyos-worker.cristinazhou0122.workers.dev';
 // Replicate model slug. Using the model-prediction endpoint means we always
 // pick up the latest published version automatically — no manual pinning.
 const MODEL_OWNER = 'lucataco';

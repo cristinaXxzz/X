@@ -6,12 +6,12 @@
  * Token: https://open.mcd.cn/mcp 申请, 每个用户独立, 存 localStorage
  *
  * 浏览器无法直连 mcd.cn (CORS), 走自家 Cloudflare Worker 透传:
- *   POST  https://sullymeow.ccwu.cc/mcp/mcd
+ *   POST  https://sullyos-worker.cristinazhou0122.workers.dev/mcp/mcd
  *   Authorization: Bearer <user_mcp_token>
  *   body: 标准 JSON-RPC 2.0 报文
  */
 
-const MCP_PROXY_URL = 'https://sullymeow.ccwu.cc/mcp/mcd';
+const MCP_PROXY_URL = 'https://sullyos-worker.cristinazhou0122.workers.dev/mcp/mcd';
 const MCP_TOKEN_KEY = 'aetheros.mcd.mcpToken';
 const MCP_ENABLED_KEY = 'aetheros.mcd.mcpEnabled';
 
