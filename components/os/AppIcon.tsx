@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppConfig } from '../../types';
 import { Icons } from '../../constants';
 import { useOS } from '../../context/OSContext';
@@ -16,7 +16,12 @@ const AppIcon: React.FC<AppIconProps> = React.memo(({ app, onClick, size = 'md',
   const { customIcons, theme } = useOS();
   const IconComponent = Icons[app.icon] || Icons.Settings;
   const customIconUrl = customIcons[app.id];
+  const [iconFailed, setIconFailed] = useState(false);
   const contentColor = theme.contentColor || '#ffffff';
+
+  useEffect(() => {
+    setIconFailed(false);
+  }, [customIconUrl]);
 
   // Standard sizes
   const sizeClasses =
@@ -38,8 +43,14 @@ const AppIcon: React.FC<AppIconProps> = React.memo(({ app, onClick, size = 'md',
         group-hover:bg-white/50 group-hover:border-white/50
       `}>
 
-        {customIconUrl ? (
-            <img src={customIconUrl} className="w-full h-full object-cover rounded-[1.2rem]" alt={app.name} loading="lazy" />
+        {customIconUrl && !iconFailed ? (
+            <img
+              src={customIconUrl}
+              className="w-full h-full object-cover rounded-[1.2rem]"
+              alt={app.name}
+              loading="lazy"
+              onError={() => setIconFailed(true)}
+            />
         ) : (
             <div 
                 className="w-[50%] h-[50%] drop-shadow-[0_2px_5px_rgba(0,0,0,0.3)] opacity-90"

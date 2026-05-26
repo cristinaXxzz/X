@@ -10,7 +10,7 @@ import { NotionManager, FeishuManager } from '../utils/realtimeContext';
 import { XhsMcpClient } from '../utils/xhsMcpClient';
 import { getMcdToken, setMcdToken as saveMcdToken, isMcdEnabled, setMcdEnabled as saveMcdEnabled, testMcdConnection, resetMcdSession } from '../utils/mcdMcpClient';
 import { Sun, Newspaper, NotePencil, Notebook, Book, ForkKnife } from '@phosphor-icons/react';
-import { loadPushConfig, savePushConfig, registerScheduleOnWorker, startHeartbeat, stopHeartbeat, isPushConfigAvailable, ensureSubscribed, sendTestPush, getPushDiagnostics, resetSubscription, deepResetSubscription, type PushDiagnostics } from '../utils/proactivePushConfig';
+import { loadPushConfig, savePushConfig, savePushEndpointConfig, registerScheduleOnWorker, startHeartbeat, stopHeartbeat, ensureSubscribed, sendTestPush, getPushDiagnostics, resetSubscription, deepResetSubscription, type PushDiagnostics } from '../utils/proactivePushConfig';
 import { ProactiveChat } from '../utils/proactiveChat';
 import { InstantPushSettingsModal } from '../components/settings/InstantPushSettingsModal';
 import { PushVapidSettingsModal } from '../components/settings/PushVapidSettingsModal';
@@ -139,7 +139,8 @@ const Settings: React.FC = () => {
 
   // Proactive Push 加速器（Worker URL / VAPID 公钥写死在 proactivePushConfig.ts 常量里）
   const initialPushCfg = loadPushConfig();
-  const ppAvailable = isPushConfigAvailable();
+  const [ppWorkerUrl, setPpWorkerUrl] = useState(initialPushCfg.workerUrl);
+  const [ppClientToken, setPpClientToken] = useState(initialPushCfg.clientToken);
   const [ppEnabled, setPpEnabled] = useState(initialPushCfg.enabled);
   const [ppStatus, setPpStatus] = useState<string>('');
   const [ppBusy, setPpBusy] = useState(false);
@@ -180,12 +181,35 @@ const Settings: React.FC = () => {
       try { setPpDiag(await getPushDiagnostics()); } catch { /* ignore */ }
   }, []);
 
+  const saveCurrentPushEndpoint = useCallback(() => {
+      const saved = savePushEndpointConfig({
+          workerUrl: ppWorkerUrl,
+          clientToken: ppClientToken,
+      });
+      setPpWorkerUrl(saved.workerUrl);
+      setPpClientToken(saved.clientToken);
+      return loadPushConfig();
+  }, [ppWorkerUrl, ppClientToken]);
+
   const doEnablePushAccelerator = async () => {
       if (ppBusy) return;
       setPpBusy(true);
       setPpStatus('正在连接 Worker…');
+      const cfg = saveCurrentPushEndpoint();
+      if (!cfg.workerUrl.startsWith('https://')) {
+          setPpStatus('失败：请先填写 https:// 开头的主动 Push Worker URL');
+          setPpBusy(false);
+          await refreshPpDiag();
+          return;
+      }
+      if (!isPushVapidReady()) {
+          setPpStatus('失败：请先生成 VAPID 推送凭据');
+          setPpBusy(false);
+          await refreshPpDiag();
+          return;
+      }
       try {
-          const res = await fetch(`${initialPushCfg.workerUrl}/health`);
+          const res = await fetch(`${cfg.workerUrl}/health`);
           if (!res.ok) { setPpStatus(`失败：Worker HTTP ${res.status}`); setPpBusy(false); return; }
       } catch (e: any) {
           setPpStatus(`失败：${e?.message || '网络错误'}`); setPpBusy(false); return;
@@ -237,6 +261,7 @@ const Settings: React.FC = () => {
   const doSendTestPush = async () => {
       if (ppTestBusy) return;
       setPpTestBusy(true);
+      saveCurrentPushEndpoint();
       setPpStatus('正在让 Worker 发一条测试推送…');
       const res = await sendTestPush();
       if (res.ok) {
@@ -1312,7 +1337,6 @@ const Settings: React.FC = () => {
         </section>
 
         {/* ───────── 主动消息 Push 加速器（开关） ───────── */}
-        {ppAvailable && (
         <section className="bg-white/80 rounded-3xl p-5 shadow-sm border border-white/50">
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -1333,6 +1357,37 @@ const Settings: React.FC = () => {
                 浏览器进程被完全关闭时无法唤醒——下次打开 app 会自动补跑漏掉的主动消息，
                 你看到的就是"开 app 即有"，不会半路弹窗打扰你。
             </p>
+
+            <div className="mb-3 rounded-2xl border border-teal-100 bg-teal-50/50 p-3 space-y-2">
+                <label className="block text-[11px] font-bold text-slate-600">
+                    主动 Push Worker URL
+                    <input
+                        value={ppWorkerUrl}
+                        onChange={e => setPpWorkerUrl(e.target.value)}
+                        placeholder="https://your-worker.workers.dev"
+                        className="mt-1 w-full rounded-xl border border-teal-100 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-teal-300"
+                    />
+                </label>
+                <label className="block text-[11px] font-bold text-slate-600">
+                    Client Token
+                    <input
+                        value={ppClientToken}
+                        onChange={e => setPpClientToken(e.target.value)}
+                        placeholder="如果 Worker 没设 token，可以留空"
+                        className="mt-1 w-full rounded-xl border border-teal-100 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-teal-300"
+                    />
+                </label>
+                <button
+                    type="button"
+                    onClick={() => { saveCurrentPushEndpoint(); void refreshPpDiag(); setPpStatus('主动 Push 配置已保存'); }}
+                    className="w-full rounded-xl bg-white px-3 py-2 text-xs font-bold text-teal-700 border border-teal-100 active:scale-[0.99]"
+                >
+                    保存主动 Push 配置
+                </button>
+                <p className="text-[10px] leading-relaxed text-slate-500">
+                    这块只管主动消息 Push 加速。Instant Push 用下面单独的配置，但两边共用上面的 VAPID 推送凭据。
+                </p>
+            </div>
 
             {ppStatus && (
                 <div className={`mb-3 p-3 rounded-xl text-xs font-medium text-center ${ppStatus.includes('成功') || ppStatus.includes('已启用') || ppStatus.includes('OK') ? 'bg-emerald-100 text-emerald-700' : ppStatus.includes('失败') || ppStatus.includes('错误') || ppStatus.includes('拒绝') ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>
@@ -1485,7 +1540,6 @@ const Settings: React.FC = () => {
                 </p>
             </div>
         </section>
-        )}
 
         {/* ───────── Instant Push ───────── */}
         <section className="bg-white/80 rounded-3xl p-5 shadow-sm border border-white/50">

@@ -12,6 +12,7 @@ import GroupChat from '../apps/GroupChat';
 import ClipNotesApp from '../apps/ClipNotesApp';
 import DiscussionApp from '../apps/DiscussionApp';
 import FanficApp from '../apps/FanficApp';
+import MurderMysteryApp from '../apps/MurderMysteryApp';
 import ThemeMaker from '../apps/ThemeMaker';
 import Appearance from '../apps/Appearance';
 import Gallery from '../apps/Gallery'; 
@@ -26,8 +27,8 @@ import MemoryPalaceApp from '../apps/MemoryPalaceApp';
 import HandbookApp from '../apps/HandbookApp';
 import QQBridge from '../apps/QQBridge';
 import HotNewsApp from '../apps/HotNewsApp';
-import { Like520Controller, shouldShowLike520Popup } from './Like520Event';
-import { UpdateNotificationController, shouldShowUpdateNotification } from './UpdateNotificationEvent';
+import { Like520Controller } from './Like520Event';
+import { UpdateNotificationController } from './UpdateNotificationEvent';
 import { AppID } from '../types';
 import { App as CapApp } from '@capacitor/app';
 import { StatusBar as CapStatusBar, Style as StatusBarStyle } from '@capacitor/status-bar';
@@ -198,13 +199,7 @@ const PhoneShell: React.FC = () => {
   const useIOSStandaloneLayout = isIOSStandaloneWebApp();
 
   // Disclaimer popup for first-time users
-  const [showDisclaimer, setShowDisclaimer] = useState(() => {
-    try {
-      return !localStorage.getItem(DISCLAIMER_KEY);
-    } catch {
-      return true;
-    }
-  });
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   const handleAcceptDisclaimer = () => {
     try {
@@ -214,19 +209,7 @@ const PhoneShell: React.FC = () => {
   };
 
   // Version update popup (2026-04) — forced once per user who hasn't seen it yet
-  const [showUpdateNotification, setShowUpdateNotification] = useState(() => {
-    try {
-      return !!(localStorage.getItem(DISCLAIMER_KEY)) && shouldShowUpdateNotification();
-    } catch { return false; }
-  });
-
-  useEffect(() => {
-    if (!showDisclaimer && !showUpdateNotification) {
-      if (shouldShowUpdateNotification()) {
-        setShowUpdateNotification(true);
-      }
-    }
-  }, [showDisclaimer]);
+  const [showUpdateNotification, setShowUpdateNotification] = useState(false);
 
   // 520 特别活动弹窗（2026-05-20 当天，且没被 dismiss / completed）
   // 一次性：用户点过任何按钮就标记 dismissed，下次刷新不再出现；
@@ -235,7 +218,8 @@ const PhoneShell: React.FC = () => {
   useEffect(() => {
     if (showDisclaimer || showUpdateNotification) return;
     if (!isDataLoaded) return;
-    if (shouldShowLike520Popup()) setShowLike520Popup(true);
+    // Personal fork: do not interrupt every fresh deployment with seasonal popups.
+    setShowLike520Popup(false);
   }, [showDisclaimer, showUpdateNotification, isDataLoaded]);
 
   // Capacitor Native Handling
@@ -379,6 +363,7 @@ const PhoneShell: React.FC = () => {
       case AppID.GroupChat: return <GroupChat />;
       case AppID.Discussion: return <DiscussionApp />;
       case AppID.Fanfic: return <FanficApp />;
+      case AppID.MurderMystery: return <MurderMysteryApp />;
       case AppID.ClipNotes: return <ClipNotesApp />;
       case AppID.ThemeMaker: return <ThemeMaker />;
       case AppID.Appearance: return <Appearance />;

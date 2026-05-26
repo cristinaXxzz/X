@@ -14,9 +14,15 @@ import { safeResponseJson } from './safeApi';
 import { ActiveMsgStore } from './activeMsgStore';
 import { KeepAlive } from './keepAlive';
 import { GRAY_SEAM_CHAT_PROTOCOL } from './graySeamPrompt';
+import { loadPushVapid } from './pushVapid';
+import { bytesToB64u, SUBSCRIBE_SETTLE_MS } from './pushSubscribeShared';
 
 const ACTIVE_MSG_VAPID_PUBLIC_KEY = import.meta.env.VITE_AMSG_VAPID_PUBLIC_KEY || '';
 const ACTIVE_MSG_API_BASE_OVERRIDE = (import.meta.env.VITE_AMSG_API_BASE_URL || '').trim();
+
+const resolveActiveMsgVapidPublicKey = () => (
+  ACTIVE_MSG_VAPID_PUBLIC_KEY || loadPushVapid().vapidPublicKey
+);
 
 export interface ActiveMsg2PushStatus {
   supported: boolean;
@@ -363,7 +369,7 @@ const decryptPayload = async (client: InternalReiClient, payload: { iv: string; 
 
 export const ActiveMsgClient = {
   get vapidPublicKey() {
-    return ACTIVE_MSG_VAPID_PUBLIC_KEY;
+    return resolveActiveMsgVapidPublicKey();
   },
 
   get apiBaseUrl() {
@@ -377,11 +383,12 @@ export const ActiveMsgClient = {
   async getPushStatus(): Promise<ActiveMsg2PushStatus> {
     const supported = 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
     if (!supported) {
+      const vapidPublicKey = resolveActiveMsgVapidPublicKey();
       return {
         supported: false,
         permission: 'unsupported',
         hasSubscription: false,
-        vapidConfigured: Boolean(ACTIVE_MSG_VAPID_PUBLIC_KEY),
+        vapidConfigured: Boolean(vapidPublicKey),
         detail: '当前浏览器不支持 Web Push。',
       };
     }
@@ -389,20 +396,22 @@ export const ActiveMsgClient = {
     await KeepAlive.init();
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.getSubscription();
+    const vapidPublicKey = resolveActiveMsgVapidPublicKey();
 
     return {
       supported: true,
       permission: Notification.permission,
       hasSubscription: Boolean(subscription),
-      vapidConfigured: Boolean(ACTIVE_MSG_VAPID_PUBLIC_KEY),
-      detail: !ACTIVE_MSG_VAPID_PUBLIC_KEY ? '缺少 VITE_AMSG_VAPID_PUBLIC_KEY。' : undefined,
+      vapidConfigured: Boolean(vapidPublicKey),
+      detail: !vapidPublicKey ? '缺少 VAPID 公钥。请先到设置里的“推送凭据 (VAPID)”生成。' : undefined,
     };
   },
 
   async ensurePushSubscription() {
     const pushStatus = await this.getPushStatus();
     if (!pushStatus.supported) throw new Error(pushStatus.detail || '当前环境不支持推送。');
-    if (!ACTIVE_MSG_VAPID_PUBLIC_KEY) throw new Error('缺少 VITE_AMSG_VAPID_PUBLIC_KEY，无法创建推送订阅。');
+    const vapidPublicKey = resolveActiveMsgVapidPublicKey();
+    if (!vapidPublicKey) throw new Error('缺少 VAPID 公钥，无法创建推送订阅。请先到设置里的“推送凭据 (VAPID)”生成。');
 
     let permission = Notification.permission;
     if (permission !== 'granted') {
@@ -415,11 +424,17 @@ export const ActiveMsgClient = {
     const globalConfig = await ensureGlobalReady();
     await KeepAlive.init();
     const registration = await navigator.serviceWorker.ready;
-    const existing = await registration.pushManager.getSubscription();
-    if (existing) return existing.toJSON();
+    let existing = await registration.pushManager.getSubscription();
+    if (existing) {
+      const existingKey = bytesToB64u(existing.options.applicationServerKey);
+      if (!existingKey || existingKey === vapidPublicKey) return existing.toJSON();
+      await existing.unsubscribe();
+      await new Promise(r => setTimeout(r, SUBSCRIBE_SETTLE_MS));
+      existing = null;
+    }
 
     const client = createClient(globalConfig.userId);
-    const subscription = await client.subscribePush(ACTIVE_MSG_VAPID_PUBLIC_KEY, registration);
+    const subscription = await client.subscribePush(vapidPublicKey, registration);
     return subscription.toJSON();
   },
 

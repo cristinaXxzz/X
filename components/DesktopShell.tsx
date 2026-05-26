@@ -8,6 +8,7 @@ import GroupChat from '../apps/GroupChat';
 import ClipNotesApp from '../apps/ClipNotesApp';
 import DiscussionApp from '../apps/DiscussionApp';
 import FanficApp from '../apps/FanficApp';
+import MurderMysteryApp from '../apps/MurderMysteryApp';
 import MusicApp from '../apps/MusicApp';
 import MemoryPalaceApp from '../apps/MemoryPalaceApp';
 import WorldbookApp from '../apps/WorldbookApp';
@@ -20,6 +21,7 @@ type DesktopTab =
   | 'group'
   | 'discussion'
   | 'fanfic'
+  | 'murder'
   | 'clip'
   | 'music'
   | 'memory'
@@ -44,6 +46,7 @@ const navGroups: Array<{
       { id: 'group', label: '群聊', desc: '多角色互动' },
       { id: 'discussion', label: '讨论', desc: '议题 / 长段观点' },
       { id: 'fanfic', label: '片场', desc: '同人片段 / 共写' },
+      { id: 'murder', label: '剧本杀', desc: 'DM / 玩家 / 搜证' },
       { id: 'clip', label: '夹页', desc: '没说完 / 不确定 / 留给你' },
     ],
   },
@@ -84,6 +87,8 @@ const DesktopShell: React.FC = () => {
         return <DiscussionApp />;
       case 'fanfic':
         return <FanficApp />;
+      case 'murder':
+        return <MurderMysteryApp />;
       case 'clip':
         return <ClipNotesApp />;
       case 'music':

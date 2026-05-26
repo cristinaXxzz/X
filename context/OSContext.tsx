@@ -289,6 +289,18 @@ const generateAvatar = (seed: string) => {
     return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23${color}"/><text x="50" y="55" font-family="sans-serif" font-weight="bold" font-size="50" text-anchor="middle" dy=".3em" fill="white" opacity="0.9">${letter}</text></svg>`;
 };
 
+const SULLY_LOCAL_IMAGE = '/pixel-char/sully.png';
+const SULLY_LOCAL_ROOM_WALL = 'linear-gradient(180deg, #f8fafc 0%, #e0f2fe 55%, #f0fdf4 100%)';
+const SULLY_LOCAL_SPRITES: Record<string, string> = {
+  normal: SULLY_LOCAL_IMAGE,
+  happy: SULLY_LOCAL_IMAGE,
+  sad: SULLY_LOCAL_IMAGE,
+  angry: SULLY_LOCAL_IMAGE,
+  shy: SULLY_LOCAL_IMAGE,
+  chibi: SULLY_LOCAL_IMAGE,
+};
+const isLegacyPresetAsset = (value?: string) => !!value && /sharkpan\.xyz/i.test(value);
+
 const defaultUserProfile: UserProfile = {
     name: 'User',
     avatar: generateAvatar('User'),
@@ -298,7 +310,7 @@ const defaultUserProfile: UserProfile = {
 const sullyV2: CharacterProfile = {
   id: 'preset-sully-v2', // Unique ID to prevent duplication
   name: 'Sully',
-  avatar: 'https://sharkpan.xyz/f/BZ3VSa/head.png',
+  avatar: SULLY_LOCAL_IMAGE,
   description: 'AI助理 / 电波系黑客猫猫',
   
   systemPrompt: `[Role Definition]
@@ -351,12 +363,7 @@ Sully是小手机的内置AI。
 `,
 
   sprites: {
-      'normal': 'https://sharkpan.xyz/f/w3QQFq/01.png',
-      'happy': 'https://sharkpan.xyz/f/MKg7ta/02.png',
-      'sad': 'https://sharkpan.xyz/f/3WnMce/03.png',
-      'angry': 'https://sharkpan.xyz/f/5n1xSj/04.png',
-      'shy': 'https://sharkpan.xyz/f/kdwet6/05.png',
-      'chibi': 'https://sharkpan.xyz/f/oWZQF4/S2.png' // Default Room Sprite (家园 Sully chibi)
+      ...SULLY_LOCAL_SPRITES,
   },
   
   spriteConfig: {
@@ -370,12 +377,8 @@ Sully是小手机的内置AI。
           id: 'skin_sully_valentine',
           name: 'Valentine',
           sprites: {
-              'normal': 'https://sharkpan.xyz/f/4rzdtj/VNormal.png',
-              'happy':  'https://sharkpan.xyz/f/m3adhW/Vha.png',
-              'sad':    'https://sharkpan.xyz/f/BZgDfa/Vsad.png',
-              'angry':  'https://sharkpan.xyz/f/NdlVfv/VAn.png',
-              'shy':    'https://sharkpan.xyz/f/VyontY/Vshy.png',
-              'love':   'https://sharkpan.xyz/f/xl8muX/VBl.png',
+              ...SULLY_LOCAL_SPRITES,
+              love: SULLY_LOCAL_IMAGE,
           }
       }
   ],
@@ -386,14 +389,14 @@ Sully是小手机的内置AI。
   
   // Default Room Config
   roomConfig: {
-      wallImage: 'https://sharkpan.xyz/f/NdJyhv/b.png', // Updated Background
+      wallImage: SULLY_LOCAL_ROOM_WALL,
       floorImage: 'repeating-linear-gradient(90deg, #e7e5e4 0px, #e7e5e4 20px, #d6d3d1 21px)',
       items: [
         {
             id: "item-1768927221380",
             name: "Sully床",
             type: "furniture",
-            image: "https://sharkpan.xyz/f/A3XeUZ/BED.png",
+            image: SULLY_LOCAL_IMAGE,
             x: 78.45852578067732,
             y: 97.38889754570907,
             scale: 2.4,
@@ -405,7 +408,7 @@ Sully是小手机的内置AI。
             id: "item-1768927255102",
             name: "Sully电脑桌",
             type: "furniture",
-            image: "https://sharkpan.xyz/f/G5n3Ul/DNZ.png",
+            image: SULLY_LOCAL_IMAGE,
             x: 28.853756791175588,
             y: 69.9444485439727,
             scale: 2.4,
@@ -417,7 +420,7 @@ Sully是小手机的内置AI。
             id: "item-1768927271632",
             name: "Sully垃圾桶",
             type: "furniture",
-            image: "https://sharkpan.xyz/f/75Nvsj/LJT.png",
+            image: SULLY_LOCAL_IMAGE,
             x: 10.276680026943646,
             y: 80.49999880981437,
             scale: 0.9,
@@ -429,7 +432,7 @@ Sully是小手机的内置AI。
             id: "item-1768927286526",
             name: "Sully洞洞板",
             type: "furniture",
-            image: "https://sharkpan.xyz/f/85K5ij/DDB.png",
+            image: SULLY_LOCAL_IMAGE,
             x: 32.608697687684455,
             y: 48.72222587415929,
             scale: 2.6,
@@ -441,7 +444,7 @@ Sully是小手机的内置AI。
             id: "item-1768927303472",
             name: "Sully书柜",
             type: "furniture",
-            image: "https://sharkpan.xyz/f/zlpWS5/SG.png",
+            image: SULLY_LOCAL_IMAGE,
             x: 79.84189945375853,
             y: 68.94444543117953,
             scale: 2,
@@ -859,6 +862,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         }
 
         await loadSettings();
+        await DB.initializeEmojiData();
 
         const [dbChars, dbThemes, dbUser, dbGroups, dbWorldbooks, dbNovels, dbSongs] = await Promise.all([
             DB.getAllCharacters(),
@@ -883,32 +887,43 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
                  const isCorrupted = !currentSprites['normal'] || !currentSprites['chibi'];
                  const needsWallUpdate = existingSully.roomConfig?.wallImage !== sullyV2.roomConfig?.wallImage;
                  const needsSkinSets = !existingSully.dateSkinSets || existingSully.dateSkinSets.length === 0;
-                 // 之前误把家园 chibi 替换成了像素小屋的像素立绘 → 还原为原版 sharkpan 立绘
+                 const hasLegacyRemoteAssets = [
+                     existingSully.avatar,
+                     ...Object.values(currentSprites),
+                     existingSully.roomConfig?.wallImage,
+                     ...(existingSully.roomConfig?.items || []).map(item => item.image),
+                     ...(existingSully.dateSkinSets || []).flatMap(skin => Object.values(skin.sprites || {})),
+                 ].some(isLegacyPresetAsset);
+                 // 之前误把家园 chibi 替换成了像素小屋的像素立绘；现在统一修到本地安全素材。
                  const hasMisplacedPixelChibi = typeof currentSprites['chibi'] === 'string'
                      && currentSprites['chibi'].startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADUAAAA4CAYAAABdeLCu');
 
-                 if (isCorrupted || !existingSully.roomConfig || needsWallUpdate || needsSkinSets || hasMisplacedPixelChibi) {
-                     const restoredSprites = { ...sullyV2.sprites, ...currentSprites };
+                 if (isCorrupted || !existingSully.roomConfig || needsWallUpdate || needsSkinSets || hasMisplacedPixelChibi || hasLegacyRemoteAssets) {
+                     const restoredSprites = { ...currentSprites };
 
-                     if (!restoredSprites['normal']) restoredSprites['normal'] = sullyV2.sprites!['normal'];
-                     if (!restoredSprites['happy']) restoredSprites['happy'] = sullyV2.sprites!['happy'];
-                     if (!restoredSprites['sad']) restoredSprites['sad'] = sullyV2.sprites!['sad'];
-                     if (!restoredSprites['angry']) restoredSprites['angry'] = sullyV2.sprites!['angry'];
-                     if (!restoredSprites['shy']) restoredSprites['shy'] = sullyV2.sprites!['shy'];
-                     if (!restoredSprites['chibi']) restoredSprites['chibi'] = sullyV2.sprites!['chibi'];
+                     if (!restoredSprites['normal'] || isLegacyPresetAsset(restoredSprites['normal'])) restoredSprites['normal'] = sullyV2.sprites!['normal'];
+                     if (!restoredSprites['happy'] || isLegacyPresetAsset(restoredSprites['happy'])) restoredSprites['happy'] = sullyV2.sprites!['happy'];
+                     if (!restoredSprites['sad'] || isLegacyPresetAsset(restoredSprites['sad'])) restoredSprites['sad'] = sullyV2.sprites!['sad'];
+                     if (!restoredSprites['angry'] || isLegacyPresetAsset(restoredSprites['angry'])) restoredSprites['angry'] = sullyV2.sprites!['angry'];
+                     if (!restoredSprites['shy'] || isLegacyPresetAsset(restoredSprites['shy'])) restoredSprites['shy'] = sullyV2.sprites!['shy'];
+                     if (!restoredSprites['chibi'] || isLegacyPresetAsset(restoredSprites['chibi'])) restoredSprites['chibi'] = sullyV2.sprites!['chibi'];
                      if (hasMisplacedPixelChibi) restoredSprites['chibi'] = sullyV2.sprites!['chibi'];
 
-                     const updatedRoomConfig = existingSully.roomConfig ? {
+                     const roomHasLegacyAssets = isLegacyPresetAsset(existingSully.roomConfig?.wallImage)
+                         || (existingSully.roomConfig?.items || []).some(item => isLegacyPresetAsset(item.image));
+                     const updatedRoomConfig = existingSully.roomConfig && !roomHasLegacyAssets ? {
                          ...existingSully.roomConfig,
                          wallImage: (existingSully.roomConfig.wallImage?.includes('radial-gradient') || !existingSully.roomConfig.wallImage)
                                     ? sullyV2.roomConfig?.wallImage
                                     : existingSully.roomConfig.wallImage
                      } : sullyV2.roomConfig;
 
-                     // Merge preset skin sets: add any preset skins not already present
+                     // Merge preset skin sets: add any preset skins not already present.
+                     // If old preset skins point to dead remote assets, replace them with local-safe presets.
                      const existingSkins = existingSully.dateSkinSets || [];
                      const presetSkins = sullyV2.dateSkinSets || [];
-                     const mergedSkins = [...existingSkins];
+                     const mergedSkins = existingSkins
+                         .filter(skin => !Object.values(skin.sprites || {}).some(isLegacyPresetAsset));
                      for (const ps of presetSkins) {
                          if (!mergedSkins.some(s => s.id === ps.id)) {
                              mergedSkins.push(ps);
@@ -917,6 +932,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
 
                      const updatedSully = {
                          ...existingSully,
+                         avatar: isLegacyPresetAsset(existingSully.avatar) ? sullyV2.avatar : existingSully.avatar,
                          sprites: restoredSprites,
                          roomConfig: updatedRoomConfig,
                          dateSkinSets: mergedSkins

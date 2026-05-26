@@ -21,8 +21,8 @@
 //   用户在 Settings → Instant Push 里生成；Proactive 和 Instant 共用同一份
 //   VAPID，避免两边互相 unsubscribe 抢同一个 pushManager 订阅。
 // ═══════════════════════════════════════════════════════════════════
-const WORKER_URL = 'https://noir2.cc.cd';
-const CLIENT_TOKEN = 'weqwqewqeqwdcsccagdgs32132';
+const LEGACY_WORKER_URL = 'https://noir2.cc.cd';
+const LEGACY_CLIENT_TOKEN = 'weqwqewqeqwdcsccagdgs32132';
 // ═══════════════════════════════════════════════════════════════════
 
 import { loadPushVapid, isPushVapidReady } from './pushVapid';
@@ -35,6 +35,7 @@ import {
 } from './pushSubscribeShared';
 
 const ENABLED_STORAGE_KEY = 'proactive_push_enabled_v1';
+const ENDPOINT_STORAGE_KEY = 'proactive_push_endpoint_v1';
 const LAST_WAKE_AT_KEY = 'proactive_push_last_wake_at_v1';
 const LAST_WAKE_CHAR_KEY = 'proactive_push_last_wake_char_v1';
 
@@ -45,16 +46,58 @@ export interface ProactivePushConfig {
   clientToken: string;
 }
 
+export interface ProactivePushEndpointConfig {
+  workerUrl: string;
+  clientToken: string;
+}
+
+function normalizeWorkerUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+function loadEndpointConfig(): ProactivePushEndpointConfig {
+  try {
+    const raw = localStorage.getItem(ENDPOINT_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ProactivePushEndpointConfig>;
+      return {
+        workerUrl: normalizeWorkerUrl(parsed.workerUrl || ''),
+        clientToken: (parsed.clientToken || '').trim(),
+      };
+    }
+  } catch { /* ignore */ }
+
+  const legacy = {
+    workerUrl: normalizeWorkerUrl(LEGACY_WORKER_URL),
+    clientToken: LEGACY_CLIENT_TOKEN.trim(),
+  };
+  if (legacy.workerUrl) {
+    try { localStorage.setItem(ENDPOINT_STORAGE_KEY, JSON.stringify(legacy)); } catch { /* ignore */ }
+  }
+  return legacy;
+}
+
+export function savePushEndpointConfig(next: Partial<ProactivePushEndpointConfig>): ProactivePushEndpointConfig {
+  const current = loadEndpointConfig();
+  const saved = {
+    workerUrl: normalizeWorkerUrl(next.workerUrl ?? current.workerUrl),
+    clientToken: (next.clientToken ?? current.clientToken).trim(),
+  };
+  try { localStorage.setItem(ENDPOINT_STORAGE_KEY, JSON.stringify(saved)); } catch { /* ignore */ }
+  return saved;
+}
+
 export function loadPushConfig(): ProactivePushConfig {
   let enabled = false;
   try {
     enabled = localStorage.getItem(ENABLED_STORAGE_KEY) === 'true';
   } catch { /* ignore */ }
+  const endpoint = loadEndpointConfig();
   return {
     enabled,
-    workerUrl: WORKER_URL.trim().replace(/\/+$/, ''),
+    workerUrl: endpoint.workerUrl,
     vapidPublicKey: loadPushVapid().vapidPublicKey,
-    clientToken: CLIENT_TOKEN.trim(),
+    clientToken: endpoint.clientToken,
   };
 }
 
@@ -73,8 +116,8 @@ export function isPushConfigReady(cfg: ProactivePushConfig = loadPushConfig()): 
 }
 
 /** True if the deployment constants have been filled in (regardless of toggle). */
-export function isPushConfigAvailable(): boolean {
-  return WORKER_URL.startsWith('https://') && isPushVapidReady();
+export function isPushConfigAvailable(cfg: ProactivePushConfig = loadPushConfig()): boolean {
+  return cfg.workerUrl.startsWith('https://') && isPushVapidReady();
 }
 
 // ---------- Web Push subscription helpers ----------

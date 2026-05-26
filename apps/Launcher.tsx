@@ -88,6 +88,12 @@ const CharacterWidget = React.memo(({
     onClick: () => void,
     contentColor: string
 }) => {
+    const [avatarFailed, setAvatarFailed] = useState(false);
+
+    useEffect(() => {
+        setAvatarFailed(false);
+    }, [char?.avatar]);
+
     return (
         <div className="mb-3 group animate-fade-in">
              <div
@@ -102,7 +108,7 @@ const CharacterWidget = React.memo(({
                 }}
              >
                  {/* 背景虚化角色头像 */}
-                 {char?.avatar && (
+                 {char?.avatar && !avatarFailed && (
                      <div className="absolute inset-0 opacity-25 pointer-events-none"
                          style={{
                              backgroundImage: `url(${char.avatar})`,
@@ -120,8 +126,12 @@ const CharacterWidget = React.memo(({
                              border: '1.5px solid rgba(255,255,255,0.25)',
                              boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
                          }}>
-                         {char ? (
-                             <img src={char.avatar} className="w-full h-full object-cover" alt="char" loading="lazy" />
+                         {char && char.avatar && !avatarFailed ? (
+                             <img src={char.avatar} className="w-full h-full object-cover" alt={char.name} loading="lazy" onError={() => setAvatarFailed(true)} />
+                         ) : char ? (
+                             <div className="w-full h-full flex items-center justify-center bg-white/10 text-white/80 text-2xl font-black">
+                                 {char.name.slice(0, 1)}
+                             </div>
                          ) : <div className="w-full h-full bg-white/10 animate-pulse" />}
                          {unreadCount > 0 ? (
                             <div className="absolute bottom-0.5 right-0.5 min-w-[16px] h-[16px] px-1 bg-red-500 rounded-full border border-white/30 shadow-sm flex items-center justify-center text-[9px] font-bold text-white">
@@ -147,7 +157,7 @@ const CharacterWidget = React.memo(({
                              )}
                          </div>
                          <div className="text-xs line-clamp-2 font-medium leading-relaxed opacity-85">
-                            <span className="opacity-50 mr-1 text-[10px]">▶</span>
+                            <span className="opacity-50 mr-1 text-[10px]">&gt;</span>
                             {lastMessage}
                          </div>
                      </div>
@@ -165,6 +175,10 @@ const AppGridPage = React.memo(({
     apps: typeof INSTALLED_APPS,
     openApp: (id: AppID) => void
 }) => {
+    const [imageFailed, setImageFailed] = useState(false);
+    useEffect(() => setImageFailed(false), [image]);
+    const hasImage = !!image && !imageFailed;
+
     return (
         <div className="grid grid-cols-4 gap-y-6 gap-x-2 place-items-center animate-fade-in relative">
              {apps.map(app => (
@@ -238,19 +252,23 @@ const DesktopSquareImage = React.memo(({ image, contentColor, onClick }: {
     contentColor: string,
     onClick: () => void,
 }) => {
+    const [imageFailed, setImageFailed] = useState(false);
+    useEffect(() => setImageFailed(false), [image]);
+    const hasImage = !!image && !imageFailed;
+
     return (
         <div
             onClick={onClick}
             className="relative w-full h-full rounded-[1.75rem] overflow-hidden cursor-pointer animate-fade-in transition-transform active:scale-[0.98]"
             style={{
-                background: image ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.28)',
+                background: hasImage ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.28)',
                 border: '1px solid rgba(255,255,255,0.18)',
                 boxShadow: '0 8px 30px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.07)',
                 color: contentColor,
             }}
         >
-            {image ? (
-                <img src={image} alt="" className="w-full h-full object-cover" loading="lazy" />
+            {hasImage ? (
+                <img src={image} alt="" className="w-full h-full object-cover" loading="lazy" onError={() => setImageFailed(true)} />
             ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
                     <div className="w-9 h-9 rounded-full flex items-center justify-center"
@@ -260,7 +278,7 @@ const DesktopSquareImage = React.memo(({ image, contentColor, onClick }: {
                         </svg>
                     </div>
                     <div className="text-[8.5px] uppercase font-bold tracking-[0.22em] opacity-55">Add Image</div>
-                    <div className="text-[8.5px] opacity-40 leading-tight">从 外观 · 启动器组件<br/>设置一张方图</div>
+                    <div className="text-[8.5px] opacity-40 leading-tight">Set a desktop square image in Appearance</div>
                 </div>
             )}
         </div>
@@ -288,7 +306,7 @@ const WidgetsPage = React.memo(({ contentColor, openApp, anniversaries, characte
               <div className="bg-white/25 rounded-3xl p-6 border border-white/25 shadow-xl">
                   <div className="flex justify-between items-center mb-4" style={{ color: contentColor }}>
                       <h3 className="text-xl font-bold tracking-widest">{monthName} {currentYear}</h3>
-                      <div onClick={() => openApp('schedule')} className="bg-white/20 p-2 rounded-full cursor-pointer hover:bg-white/40 transition-colors">
+                      <div onClick={() => openApp(AppID.User)} className="bg-white/20 p-2 rounded-full cursor-pointer hover:bg-white/40 transition-colors">
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                       </div>
                   </div>
@@ -430,7 +448,7 @@ const Launcher: React.FC = () => {
                   if (visibleMsgs.length > 0) {
                       const last = visibleMsgs[visibleMsgs.length - 1];
                       const cleanContent = last.content.replace(/\[.*?\]/g, '').trim();
-                      setLastMessage(cleanContent || (last.type === 'image' ? '[图片]' : '[消息]'));
+                      setLastMessage(cleanContent || (last.type === 'image' ? '[image]' : '[message]'));
                   } else {
                       setLastMessage(targetChar.description || "System Ready.");
                   }

@@ -57,15 +57,19 @@ export interface ScheduledMessage {
 
 // Built-in Presets
 const SULLY_CATEGORY_ID = 'cat_sully_exclusive';
+const stickerSvg = (label: string, bg: string, fg: string = '#1f2937') => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"><rect width="240" height="240" rx="48" fill="${bg}"/><circle cx="82" cy="84" r="14" fill="${fg}"/><circle cx="158" cy="84" r="14" fill="${fg}"/><path d="M76 135c25 22 63 22 88 0" fill="none" stroke="${fg}" stroke-width="12" stroke-linecap="round"/><text x="120" y="205" text-anchor="middle" font-family="system-ui, sans-serif" font-size="28" font-weight="800" fill="${fg}">${label}</text></svg>`;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
 const SULLY_PRESET_EMOJIS = [
-    { name: 'Sully晚安', url: 'https://sharkpan.xyz/f/pWg6HQ/night.png', categoryId: SULLY_CATEGORY_ID },
-    { name: 'Sully无语', url: 'https://sharkpan.xyz/f/75wvuj/w.png', categoryId: SULLY_CATEGORY_ID },
-    { name: 'Sully偷看', url: 'https://sharkpan.xyz/f/MK77Ia/see.png', categoryId: SULLY_CATEGORY_ID },
-    { name: 'Sully打气', url: 'https://sharkpan.xyz/f/3WwMHe/fight.png', categoryId: SULLY_CATEGORY_ID },
-    { name: 'Sully生气', url: 'https://sharkpan.xyz/f/5nwxCj/an.png', categoryId: SULLY_CATEGORY_ID },
-    { name: 'Sully疑惑', url: 'https://sharkpan.xyz/f/ylWpfN/sDN.png', categoryId: SULLY_CATEGORY_ID },
-    { name: 'Sully道歉', url: 'https://sharkpan.xyz/f/QdnaU6/sorry.png', categoryId: SULLY_CATEGORY_ID },
-    { name: 'Sully等你消息', url: 'https://sharkpan.xyz/f/5nrJsj/wait.png', categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully晚安', url: stickerSvg('晚安', '#dbeafe'), categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully无语', url: stickerSvg('无语', '#e5e7eb'), categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully偷看', url: stickerSvg('偷看', '#fef3c7'), categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully打气', url: stickerSvg('打气', '#dcfce7'), categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully生气', url: stickerSvg('生气', '#fee2e2'), categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully疑惑', url: stickerSvg('疑惑', '#ede9fe'), categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully道歉', url: stickerSvg('道歉', '#fce7f3'), categoryId: SULLY_CATEGORY_ID },
+    { name: 'Sully等你消息', url: stickerSvg('等你', '#ccfbf1'), categoryId: SULLY_CATEGORY_ID },
 ];
 
 export const openDB = (): Promise<IDBDatabase> => {
@@ -669,12 +673,12 @@ export const DB = {
       }
       if (!cats.some(c => c.id === SULLY_CATEGORY_ID)) {
           await DB.saveEmojiCategory({ id: SULLY_CATEGORY_ID, name: 'Sully 专属', isSystem: true });
-          const db = await openDB();
-          const tx = db.transaction(STORE_EMOJIS, 'readwrite');
-          const store = tx.objectStore(STORE_EMOJIS);
-          SULLY_PRESET_EMOJIS.forEach(emoji => store.put(emoji));
-          await new Promise(resolve => { tx.oncomplete = resolve; });
       }
+      const db = await openDB();
+      const tx = db.transaction(STORE_EMOJIS, 'readwrite');
+      const store = tx.objectStore(STORE_EMOJIS);
+      SULLY_PRESET_EMOJIS.forEach(emoji => store.put(emoji));
+      await new Promise(resolve => { tx.oncomplete = resolve; });
   },
 
   getThemes: async (): Promise<ChatTheme[]> => {

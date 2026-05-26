@@ -5,7 +5,7 @@ import { CharacterProfile } from '../types';
 import { extractContent, safeFetchJson } from '../utils/safeApi';
 
 type FicTone = 'daily' | 'tension' | 'conflict' | 'letter' | 'quiet' | 'comic';
-type FicView = 'third' | 'first_selected' | 'observer';
+type FicView = 'third' | 'first_selected' | 'camera';
 
 interface FicDraft {
   id: string;
@@ -33,7 +33,7 @@ const toneOptions: Array<{ id: FicTone; label: string; hint: string }> = [
 const viewOptions: Array<{ id: FicView; label: string }> = [
   { id: 'third', label: '第三人称' },
   { id: 'first_selected', label: '主视角角色第一人称' },
-  { id: 'observer', label: '用户旁观视角' },
+  { id: 'camera', label: '镜头旁观视角' },
 ];
 
 const loadDrafts = (): FicDraft[] => {
@@ -62,9 +62,11 @@ const buildFanficMessages = (
   tone: FicTone,
   view: FicView,
   previousText: string,
+  userName: string,
 ) => {
   const toneInfo = toneOptions.find((item) => item.id === tone);
   const viewInfo = viewOptions.find((item) => item.id === view);
+  const castNames = selectedCharacters.map((char) => char.name).join('、');
   const cast = selectedCharacters.map((char) => (
     `【${char.name}】\n简介：${char.description || '无'}\n设定：${char.systemPrompt || '无'}`
   )).join('\n\n---\n\n');
@@ -75,17 +77,17 @@ const buildFanficMessages = (
   return [
     {
       role: 'system',
-      content: `你是一个克制、细腻的同人片段写作者。你要写角色之间的文学片段，不是群聊记录，也不是设定说明书。\n\n写作规则：\n1. 尊重每个角色的设定和说话习惯。\n2. 不替用户下结论，不暴露 API、prompt、模型等后台词。\n3. 可以写长段，允许心理描写、动作、留白和对话。\n4. 不要把所有角色写成同一个声音。\n5. 不要写露骨性内容；暧昧可以克制、有张力。\n6. 如果信息不够，就写一个合理片段，不要反复提“信息不足”。`,
+      content: `你是一个克制、细腻的同人片段写作者。你要写“角色与角色之间”的文学片段，不是群聊记录，也不是设定说明书。\n\n最高优先级：\n- 用户只是导演/委托人/出题人，不是故事里的角色。\n- 不要把用户、{{user}}、“我”、读者或提需求的人写进正文。\n- 正文只能围绕本次选择的参与角色展开：${castNames || '所选角色'}。\n- 除非场景里明确要求新增路人，否则不要新增第三个主要人物。\n\n写作规则：\n1. 尊重每个角色的设定和说话习惯。\n2. 不替用户下结论，不暴露 API、prompt、模型等后台词。\n3. 可以写长段，允许心理描写、动作、留白和对话。\n4. 不要把所有角色写成同一个声音。\n5. 不要写露骨性内容；暧昧可以克制、有张力。\n6. 如果信息不够，就写一个合理片段，不要反复提“信息不足”。`,
     },
     {
       role: 'user',
-      content: `参与角色：\n${cast}\n\n执笔参考角色：${writer?.name || '全局模型'}\n风格：${toneInfo?.label || tone}（${toneInfo?.hint || ''}）\n视角：${viewInfo?.label || view}\n\n场景 / 梗 / 想写的东西：\n${scene.trim()}${previous}\n\n请写一段 800-1800 字左右的同人文片段。直接输出正文，不要标题，不要分析，不要列提纲。`,
+      content: `参与角色（正文主角只能从这里选）：\n${cast}\n\n用户/导演名字：${userName || '用户'}（仅用于理解委托来源，不得作为角色写进正文）\n执笔参考角色：${writer?.name || '全局模型'}\n风格：${toneInfo?.label || tone}（${toneInfo?.hint || ''}）\n视角：${viewInfo?.label || view}\n\n场景 / 梗 / 想写的东西：\n${scene.trim()}${previous}\n\n请写一段 800-1800 字左右的同人文片段。正文必须是 ${castNames || '所选角色'} 之间的故事；不要出现“用户”“{{user}}”“读者”“你/我（指委托人）”作为登场人物。直接输出正文，不要标题，不要分析，不要列提纲。`,
     },
   ];
 };
 
 const FanficApp: React.FC = () => {
-  const { closeApp, characters, apiConfig, addToast } = useOS();
+  const { closeApp, characters, apiConfig, addToast, userProfile } = useOS();
   const [drafts, setDrafts] = useState<FicDraft[]>(() => loadDrafts());
   const [activeDraftId, setActiveDraftId] = useState<string>(() => loadDrafts()[0]?.id || '');
   const [title, setTitle] = useState('');
@@ -123,7 +125,8 @@ const FanficApp: React.FC = () => {
     setScene(draft.scene);
     setSelectedIds(draft.characterIds);
     setTone(draft.tone);
-    setView(draft.view);
+    const draftView = draft.view as FicView | 'observer';
+    setView(draftView === 'observer' ? 'camera' : draftView);
     setContent(draft.content);
     setWriterId(draft.characterIds[0] || characters[0]?.id || '');
   };
@@ -211,7 +214,7 @@ const FanficApp: React.FC = () => {
         },
         body: JSON.stringify({
           model: writer?.apiModel?.trim() || apiConfig.model,
-          messages: buildFanficMessages(selectedCharacters, writer, cleanScene, tone, view, mode === 'continue' ? content : ''),
+          messages: buildFanficMessages(selectedCharacters, writer, cleanScene, tone, view, mode === 'continue' ? content : '', userProfile.name),
           temperature: 0.9,
           max_tokens: 3600,
           stream: false,
