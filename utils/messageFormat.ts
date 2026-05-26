@@ -25,6 +25,13 @@ export function normalizeMessageContent(
     if (type === 'image') return '[图片]';
     if (type === 'emoji') return '[表情包]';
     if (type === 'voice') return '[语音]';
+    if (type === 'file') {
+        const meta: any = msg.metadata?.file || {};
+        const name = meta.name || '未命名文件';
+        const ext = meta.extension || meta.mimeType || 'file';
+        const truncated = meta.truncated ? '（内容已截断）' : '';
+        return `[文件: ${name} / ${ext}]${truncated}\n${msg.content || ''}`;
+    }
 
     // 系统交互事件
     if (type === 'interaction') return `[系统: ${userName}戳了${charName}一下]`;

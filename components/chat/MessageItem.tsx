@@ -1605,6 +1605,37 @@ const MessageItem = React.memo(({
         );
     }
 
+    if ((m.type as string) === 'file') {
+        const file = m.metadata?.file || {};
+        const fileName = file.name || '未命名文件';
+        const ext = String(file.extension || 'file').toUpperCase();
+        const size = Number(file.size || 0);
+        const sizeLabel = size > 1024 * 1024
+            ? `${(size / 1024 / 1024).toFixed(1)} MB`
+            : size > 1024
+              ? `${Math.round(size / 1024)} KB`
+              : `${size || 0} B`;
+        const preview = String(m.content || '').replace(/\s+/g, ' ').slice(0, 160);
+        return commonLayout(
+            <div className="w-[min(18rem,72vw)] rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-sm">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-[11px] font-black text-emerald-600">
+                        {ext.slice(0, 4)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold">{fileName}</div>
+                        <div className="mt-0.5 text-[11px] text-slate-400">{sizeLabel}{file.truncated ? ' / 已截断' : ''}</div>
+                    </div>
+                </div>
+                {preview && (
+                    <div className="mt-3 line-clamp-3 rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+                        {preview}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     // --- Dynamic Style Generation for Bubble ---
     const radius = styleConfig.borderRadius;
     const borderObj: React.CSSProperties = { borderRadius: `${radius}px` };

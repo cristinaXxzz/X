@@ -889,6 +889,14 @@ ${xhsEnabled ? `${[notionEnabled, feishuEnabled, notionNotesEnabled].filter(Bool
                      const stickerName = emojis.find(e => e.url === m.content)?.name || 'Image/Sticker';
                      content = `${timeStr} [${m.role === 'user' ? '用户' : '你'} 发送了表情包: ${stickerName}]`;
                 }
+                else if ((m.type as string) === 'file') {
+                    const meta: any = m.metadata?.file || {};
+                    const sender = m.role === 'user' ? (userProfile?.name || '用户') : '角色';
+                    const fileName = meta.name || '未命名文件';
+                    const fileType = meta.extension || meta.mimeType || 'unknown';
+                    const truncated = meta.truncated ? '\n[注意：文件内容较长，当前上下文里只包含截断后的部分。]' : '';
+                    content = `${timeStr} [${sender}上传了文件：${fileName} (${fileType})]\n文件正文：\n${m.content || '（没有读到文字内容）'}${truncated}`;
+                }
                 else if ((m.type as string) === 'chat_forward') {
                     try {
                         const fwd = JSON.parse(m.content);

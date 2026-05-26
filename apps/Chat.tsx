@@ -3,6 +3,7 @@ import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { Message, MessageType, MemoryFragment, Emoji, EmojiCategory } from '../types';
 import { processImage } from '../utils/file';
+import { parseChatFile } from '../utils/documentParser';
 import { safeResponseJson, extractContent } from '../utils/safeApi';
 import { formatMessageWithTime } from '../utils/messageFormat';
 import { XhsMcpClient, extractNotesFromMcpData, normalizeNote } from '../utils/xhsMcpClient';
@@ -937,6 +938,26 @@ const Chat: React.FC = () => {
             await handleSendText(base64, 'image');
         } catch (err: any) {
             addToast(err.message || '图片处理失败', 'error');
+        }
+    };
+
+    const handleFileSelect = async (file: File) => {
+        try {
+            addToast('正在读取文件...', 'info');
+            const parsed = await parseChatFile(file);
+            setShowPanel('none');
+            await handleSendText(parsed.text, 'file', {
+                file: {
+                    name: parsed.name,
+                    mimeType: parsed.mimeType,
+                    size: parsed.size,
+                    extension: parsed.extension,
+                    truncated: parsed.truncated,
+                },
+            });
+            addToast(parsed.truncated ? '文件已读取，内容较长已截断' : '文件已加入私聊上下文', 'success');
+        } catch (err: any) {
+            addToast(err?.message || '文件读取失败', 'error');
         }
     };
 
@@ -2237,6 +2258,7 @@ const Chat: React.FC = () => {
                     onRemoveTheme={removeCustomTheme} activeThemeId={currentThemeId}
                     onPanelAction={handlePanelAction}
                     onImageSelect={handleImageSelect}
+                    onFileSelect={handleFileSelect}
                     isSummarizing={isSummarizing}
                     categories={visibleCategories}
                     activeCategory={activeCategory}

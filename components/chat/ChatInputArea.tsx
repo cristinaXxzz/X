@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { ShareNetwork, Trash, Plus, Smiley, PaperPlaneTilt, BookOpenText, GearSix, Image, Lock, ArrowsClockwise, ChatCircleDots, ForkKnife, Brain } from '@phosphor-icons/react';
+import { ShareNetwork, Trash, Plus, Smiley, PaperPlaneTilt, BookOpenText, GearSix, Image, Lock, ArrowsClockwise, ChatCircleDots, ForkKnife, Brain, FileText } from '@phosphor-icons/react';
 import { CharacterProfile, ChatTheme, EmojiCategory, Emoji } from '../../types';
 import { PRESET_THEMES } from './ChatConstants';
 import { isIOSStandaloneWebApp } from '../../utils/iosStandalone';
@@ -26,6 +26,7 @@ interface ChatInputAreaProps {
     activeThemeId: string;
     onPanelAction: (type: string, payload?: any) => void;
     onImageSelect: (file: File) => void;
+    onFileSelect?: (file: File) => void;
     isSummarizing: boolean;
     // Categories Support
     categories?: EmojiCategory[];
@@ -51,7 +52,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     showPanel, setShowPanel, onSend, onDeleteSelected, onForwardSelected, selectedCount,
     emojis, characters, activeCharacterId, onCharSelect,
     customThemes, onUpdateTheme, onRemoveTheme, activeThemeId,
-    onPanelAction, onImageSelect, isSummarizing,
+    onPanelAction, onImageSelect, onFileSelect, isSummarizing,
     categories = [], activeCategory = 'default',
     onReroll, canReroll,
     isProactiveActive,
@@ -63,6 +64,7 @@ showThinkingChain = false,
     chromeStyle = 'soft',
 }) => {
     const chatImageInputRef = useRef<HTMLInputElement>(null);
+    const chatFileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [actionsPage, setActionsPage] = useState<0 | 1>(0);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -85,6 +87,14 @@ showThinkingChain = false,
             onImageSelect(file);
         }
         if (e.target) e.target.value = ''; // Reset
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file && onFileSelect) {
+            onFileSelect(file);
+        }
+        if (e.target) e.target.value = '';
     };
 
     // --- Unified Touch/Long-Press Logic ---
@@ -468,6 +478,20 @@ showThinkingChain = false,
                                 <span className="text-xs font-bold">相册</span>
                             </button>
                             <input type="file" ref={chatImageInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageChange(e, 'chat')} />
+
+                            <button onClick={() => chatFileInputRef.current?.click()} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}>
+                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border ${isDiscordStyle ? 'bg-slate-800 text-emerald-300 border-emerald-400/20' : 'bg-emerald-50 text-emerald-500 border-emerald-100'}`}>
+                                    <FileText className="w-6 h-6" weight="bold" />
+                                </div>
+                                <span className="text-xs font-bold">文件</span>
+                            </button>
+                            <input
+                                type="file"
+                                ref={chatFileInputRef}
+                                className="hidden"
+                                accept=".txt,.md,.markdown,.csv,.log,.json,.docx,.pdf,text/*,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                onChange={handleFileChange}
+                            />
 
                             {/* Regenerate Button */}
                             <button onClick={onReroll} disabled={!canReroll} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${canReroll ? (isDiscordStyle ? 'text-slate-200' : 'text-slate-600') : 'text-slate-300 opacity-50'}`}>
