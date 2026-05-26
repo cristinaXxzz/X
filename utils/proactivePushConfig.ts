@@ -382,7 +382,11 @@ export async function ensureSubscribed(): Promise<SubscribeResult> {
         intervalMs: NEVER_FIRE_INTERVAL_MS,
       }),
     });
-    if (!res.ok) return { ok: false, reason: `Worker /subscribe 返回 HTTP ${res.status}`, endpoint: sub.endpoint };
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      const suffix = detail ? `: ${detail.slice(0, 160)}` : '';
+      return { ok: false, reason: `Worker /subscribe 返回 HTTP ${res.status}${suffix}`, endpoint: sub.endpoint };
+    }
   } catch (e: any) {
     return { ok: false, reason: `Worker 连接失败：${e?.message || '网络错误'}`, endpoint: sub.endpoint };
   }
@@ -393,19 +397,25 @@ export async function ensureSubscribed(): Promise<SubscribeResult> {
 /** Ask the Worker to fire a one-shot test push at this device's endpoint. */
 export async function sendTestPush(): Promise<{ ok: boolean; status?: number; reason?: string; deadSubscription?: boolean }> {
   const cfg = loadPushConfig();
-  if (!cfg.workerUrl.startsWith('https://')) return { ok: false, reason: 'Worker URL 未配置' };
+  if (!cfg.workerUrl.startsWith('https://')) return { ok: false, reason: 'Worker URL is not configured' };
+
+  const ready = await ensureSubscribed();
+  if (!ready.ok) {
+    return { ok: false, reason: ready.reason || 'subscription registration failed' };
+  }
 
   const reg = await navigator.serviceWorker?.ready?.catch(() => null);
   const sub = reg ? await reg.pushManager.getSubscription() : null;
-  if (!sub) return { ok: false, reason: '本设备没有现有订阅，请先点"开启系统通知"' };
+  const endpoint = ready.endpoint || sub?.endpoint;
+  if (!endpoint) return { ok: false, reason: 'no push endpoint available for this device' };
 
-  // Browser-side zombie-endpoint guard — bail before bothering the Worker.
-  // Otherwise Worker will fetch permanently-removed.invalid → 530 from CF.
-  if (isDeadSubscriptionEndpoint(sub.endpoint)) {
+  // Browser-side zombie-endpoint guard - bail before bothering the Worker.
+  // Otherwise Worker will fetch permanently-removed.invalid and fail from CF.
+  if (isDeadSubscriptionEndpoint(endpoint)) {
     return {
       ok: false,
       deadSubscription: true,
-      reason: '订阅已被浏览器吊销（permanently-removed.invalid），点"重置订阅"重建一次',
+      reason: 'subscription was revoked by the browser; reset it and try again',
     };
   }
 
@@ -413,14 +423,14 @@ export async function sendTestPush(): Promise<{ ok: boolean; status?: number; re
     const res = await fetch(`${cfg.workerUrl}/test`, {
       method: 'POST',
       headers: buildHeaders(cfg),
-      body: JSON.stringify({ endpoint: sub.endpoint }),
+      body: JSON.stringify({ endpoint }),
     });
     const data = await res.json().catch(() => ({})) as any;
     if (!res.ok) return { ok: false, status: res.status, reason: data?.error || data?.reason || `HTTP ${res.status}` };
-    if (!data?.ok) return { ok: false, status: data?.status, reason: data?.reason || data?.error || '推送失败' };
+    if (!data?.ok) return { ok: false, status: data?.status, reason: data?.reason || data?.error || 'push failed' };
     return { ok: true, status: data?.status };
   } catch (e: any) {
-    return { ok: false, reason: e?.message || '网络错误' };
+    return { ok: false, reason: e?.message || 'network error' };
   }
 }
 
