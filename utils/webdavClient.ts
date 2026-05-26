@@ -14,8 +14,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 import { CloudBackupConfig, CloudBackupFile } from '../types';
-
-const WORKER_URL = 'https://sullymeow.ccwu.cc';
+import { getProxyWorkerUrl } from './workerEndpoint';
 
 const isNative = (): boolean => {
     try {
@@ -29,7 +28,7 @@ const buildFullUrl = (webdavUrl: string, path: string): string =>
     webdavUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
 
 const buildProxyUrl = (fullUrl: string): string =>
-    `${WORKER_URL}/webdav?url=${encodeURIComponent(fullUrl)}`;
+    `${getProxyWorkerUrl()}/webdav?url=${encodeURIComponent(fullUrl)}`;
 
 const buildAuthHeader = (config: CloudBackupConfig): string =>
     `Basic ${btoa(`${config.username}:${config.password}`)}`;

@@ -175,10 +175,6 @@ const AppGridPage = React.memo(({
     apps: typeof INSTALLED_APPS,
     openApp: (id: AppID) => void
 }) => {
-    const [imageFailed, setImageFailed] = useState(false);
-    useEffect(() => setImageFailed(false), [image]);
-    const hasImage = !!image && !imageFailed;
-
     return (
         <div className="grid grid-cols-4 gap-y-6 gap-x-2 place-items-center animate-fade-in relative">
              {apps.map(app => (
