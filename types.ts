@@ -8,6 +8,7 @@ export enum AppID {
   ClipNotes = 'clip_notes',
   Discussion = 'discussion',
   Fanfic = 'fanfic',
+  AdultFic = 'adult_fic',
   MurderMystery = 'murder_mystery',
   Gallery = 'gallery',
   Music = 'music',

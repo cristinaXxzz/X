@@ -45,6 +45,7 @@ export const Icons: Record<string, React.FC<{ className?: string }>> = {
   ClipNotes: ({ className }) => <NotePencil className={className} weight="duotone" />,
   Discussion: ({ className }) => <ChatCircleText className={className} weight="duotone" />,
   Fanfic: ({ className }) => <BookOpenText className={className} weight="duotone" />,
+  AdultFic: ({ className }) => <BookOpenText className={className} weight="fill" />,
   MurderMystery: ({ className }) => <Detective className={className} weight="duotone" />,
 };
 
@@ -55,6 +56,7 @@ export const INSTALLED_APPS: AppConfig[] = [
   { id: AppID.GroupChat, name: '群聊', icon: 'GroupChat', color: 'violet' },
   { id: AppID.Discussion, name: '讨论', icon: 'Discussion', color: 'emerald' },
   { id: AppID.Fanfic, name: '片场', icon: 'Fanfic', color: 'rose' },
+  { id: AppID.AdultFic, name: '暗页', icon: 'AdultFic', color: 'rose' },
   { id: AppID.MurderMystery, name: '剧本杀', icon: 'MurderMystery', color: 'amber' },
   { id: AppID.ClipNotes, name: '夹页', icon: 'ClipNotes', color: 'amber' },
   { id: AppID.User, name: '档案', icon: 'User', color: 'blue' },

@@ -12,6 +12,7 @@ import GroupChat from '../apps/GroupChat';
 import ClipNotesApp from '../apps/ClipNotesApp';
 import DiscussionApp from '../apps/DiscussionApp';
 import FanficApp from '../apps/FanficApp';
+import AdultFicApp from '../apps/AdultFicApp';
 import MurderMysteryApp from '../apps/MurderMysteryApp';
 import ThemeMaker from '../apps/ThemeMaker';
 import Appearance from '../apps/Appearance';
@@ -363,6 +364,7 @@ const PhoneShell: React.FC = () => {
       case AppID.GroupChat: return <GroupChat />;
       case AppID.Discussion: return <DiscussionApp />;
       case AppID.Fanfic: return <FanficApp />;
+      case AppID.AdultFic: return <AdultFicApp />;
       case AppID.MurderMystery: return <MurderMysteryApp />;
       case AppID.ClipNotes: return <ClipNotesApp />;
       case AppID.ThemeMaker: return <ThemeMaker />;
