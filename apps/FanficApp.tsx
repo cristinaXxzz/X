@@ -4,7 +4,7 @@ import { useOS } from '../context/OSContext';
 import { CharacterProfile } from '../types';
 import { extractContent, safeFetchJson } from '../utils/safeApi';
 
-type FicTone = 'daily' | 'tension' | 'conflict' | 'letter' | 'quiet' | 'comic';
+type FicTone = string;
 type FicView = 'third' | 'first_selected' | 'camera';
 
 interface FicDraft {
@@ -13,6 +13,8 @@ interface FicDraft {
   characterIds: string[];
   scene: string;
   tone: FicTone;
+  relationshipFrame?: string;
+  playNotes?: string;
   view: FicView;
   content: string;
   createdAt: number;
@@ -29,6 +31,14 @@ const toneOptions: Array<{ id: FicTone; label: string; hint: string }> = [
   { id: 'quiet', label: '安静片段', hint: '心理、动作和留白更多' },
   { id: 'comic', label: '轻喜剧', hint: '吐槽、接梗、短促节奏' },
 ];
+
+const toneLabelMap: Record<string, string> = Object.fromEntries(
+  toneOptions.map((item) => [item.id, `${item.label} - ${item.hint}`]),
+);
+
+const normalizeToneText = (tone: string): string => (
+  toneLabelMap[tone] || tone || ''
+);
 
 const viewOptions: Array<{ id: FicView; label: string }> = [
   { id: 'third', label: '第三人称' },
@@ -60,12 +70,16 @@ const buildFanficMessages = (
   writer: CharacterProfile | undefined,
   scene: string,
   tone: FicTone,
+  relationshipFrame: string,
+  playNotes: string,
   view: FicView,
   previousText: string,
   userName: string,
 ) => {
-  const toneInfo = toneOptions.find((item) => item.id === tone);
   const viewInfo = viewOptions.find((item) => item.id === view);
+  const toneText = normalizeToneText(tone).trim() || '由场景自行决定，重角色之间的关系质感';
+  const relationshipText = relationshipFrame.trim() || '按场景自然发展，不把用户写进正文';
+  const playText = playNotes.trim() || '无特别玩法；保持角色味和片段感';
   const castNames = selectedCharacters.map((char) => char.name).join('、');
   const cast = selectedCharacters.map((char) => (
     `【${char.name}】\n简介：${char.description || '无'}\n设定：${char.systemPrompt || '无'}`
@@ -81,7 +95,7 @@ const buildFanficMessages = (
     },
     {
       role: 'user',
-      content: `参与角色（正文主角只能从这里选）：\n${cast}\n\n用户/导演名字：${userName || '用户'}（仅用于理解委托来源，不得作为角色写进正文）\n执笔参考角色：${writer?.name || '全局模型'}\n风格：${toneInfo?.label || tone}（${toneInfo?.hint || ''}）\n视角：${viewInfo?.label || view}\n\n场景 / 梗 / 想写的东西：\n${scene.trim()}${previous}\n\n请写一段 800-1800 字左右的同人文片段。正文必须是 ${castNames || '所选角色'} 之间的故事；不要出现“用户”“{{user}}”“读者”“你/我（指委托人）”作为登场人物。直接输出正文，不要标题，不要分析，不要列提纲。`,
+      content: `参与角色（正文主角只能从这里选）：\n${cast}\n\n用户/导演名字：${userName || '用户'}（仅用于理解委托来源，不得作为角色写进正文）\n执笔参考角色：${writer?.name || '全局模型'}\n风格：${toneText}\n关系框架：${relationshipText}\n玩法 / 写作要求：${playText}\n视角：${viewInfo?.label || view}\n\n场景 / 梗 / 想写的东西：\n${scene.trim()}${previous}\n\n请写一段 800-1800 字左右的同人文片段。正文必须是 ${castNames || '所选角色'} 之间的故事；不要出现“用户”“{{user}}”“读者”“你/我（指委托人）”作为登场人物。直接输出正文，不要标题，不要分析，不要列提纲。`,
     },
   ];
 };
@@ -94,7 +108,9 @@ const FanficApp: React.FC = () => {
   const [scene, setScene] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(() => characters.slice(0, 2).map((char) => char.id));
   const [writerId, setWriterId] = useState<string>(() => characters[0]?.id || '');
-  const [tone, setTone] = useState<FicTone>('daily');
+  const [tone, setTone] = useState<FicTone>('日常但有暗流，角色之间的对白自然一点，不要像总结设定。');
+  const [relationshipFrame, setRelationshipFrame] = useState('');
+  const [playNotes, setPlayNotes] = useState('');
   const [view, setView] = useState<FicView>('third');
   const [content, setContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -124,7 +140,9 @@ const FanficApp: React.FC = () => {
     setTitle(draft.title);
     setScene(draft.scene);
     setSelectedIds(draft.characterIds);
-    setTone(draft.tone);
+    setTone(normalizeToneText(draft.tone));
+    setRelationshipFrame(draft.relationshipFrame || '');
+    setPlayNotes(draft.playNotes || '');
     const draftView = draft.view as FicView | 'observer';
     setView(draftView === 'observer' ? 'camera' : draftView);
     setContent(draft.content);
@@ -138,7 +156,9 @@ const FanficApp: React.FC = () => {
     setContent('');
     setSelectedIds(characters.slice(0, 2).map((char) => char.id));
     setWriterId(characters[0]?.id || '');
-    setTone('daily');
+    setTone('日常但有暗流，角色之间的对白自然一点，不要像总结设定。');
+    setRelationshipFrame('');
+    setPlayNotes('');
     setView('third');
   };
 
@@ -159,6 +179,8 @@ const FanficApp: React.FC = () => {
           scene: cleanScene,
           characterIds: selectedIds,
           tone,
+          relationshipFrame: relationshipFrame.trim(),
+          playNotes: playNotes.trim(),
           view,
           content: cleanContent,
           updatedAt: now,
@@ -172,6 +194,8 @@ const FanficApp: React.FC = () => {
         scene: cleanScene,
         characterIds: selectedIds,
         tone,
+        relationshipFrame: relationshipFrame.trim(),
+        playNotes: playNotes.trim(),
         view,
         content: cleanContent,
         createdAt: now,
@@ -214,7 +238,17 @@ const FanficApp: React.FC = () => {
         },
         body: JSON.stringify({
           model: writer?.apiModel?.trim() || apiConfig.model,
-          messages: buildFanficMessages(selectedCharacters, writer, cleanScene, tone, view, mode === 'continue' ? content : '', userProfile.name),
+          messages: buildFanficMessages(
+            selectedCharacters,
+            writer,
+            cleanScene,
+            tone,
+            relationshipFrame,
+            playNotes,
+            view,
+            mode === 'continue' ? content : '',
+            userProfile.name,
+          ),
           temperature: 0.9,
           max_tokens: 3600,
           stream: false,
@@ -356,20 +390,33 @@ const FanficApp: React.FC = () => {
               </div>
 
               <div className="rounded-3xl border border-stone-200 bg-white p-4">
-                <div className="mb-3 text-xs font-black uppercase text-stone-400">风格</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {toneOptions.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setTone(item.id)}
-                      className={`rounded-2xl border px-3 py-2 text-left text-sm font-bold ${
-                        tone === item.id ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-stone-200 bg-stone-50 text-stone-600'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
+                <label className="text-xs font-black uppercase text-stone-400">风格</label>
+                <textarea
+                  value={tone}
+                  onChange={(event) => setTone(event.target.value)}
+                  placeholder="自填，比如：日常但有暗流；对白短一点，动作和停顿多一点；不要像设定说明。"
+                  className="mt-2 min-h-[92px] w-full resize-y rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-6 outline-none focus:border-stone-400"
+                />
+              </div>
+
+              <div className="rounded-3xl border border-stone-200 bg-white p-4">
+                <label className="text-xs font-black uppercase text-stone-400">关系框架</label>
+                <textarea
+                  value={relationshipFrame}
+                  onChange={(event) => setRelationshipFrame(event.target.value)}
+                  placeholder="自填他们当前是什么关系、卡在哪里、谁更主动、谁在回避。"
+                  className="mt-2 min-h-[92px] w-full resize-y rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-6 outline-none focus:border-stone-400"
+                />
+              </div>
+
+              <div className="rounded-3xl border border-stone-200 bg-white p-4">
+                <label className="text-xs font-black uppercase text-stone-400">玩法 / 写作要求</label>
+                <textarea
+                  value={playNotes}
+                  onChange={(event) => setPlayNotes(event.target.value)}
+                  placeholder="自填，比如：误会、搭话失败、互相拆台、只写两个角色、不加旁白解释。"
+                  className="mt-2 min-h-[92px] w-full resize-y rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-6 outline-none focus:border-stone-400"
+                />
               </div>
 
               <div className="rounded-3xl border border-stone-200 bg-white p-4">

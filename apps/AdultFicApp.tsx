@@ -6,13 +6,14 @@ import { extractContent, safeFetchJson } from '../utils/safeApi';
 
 type HeatLevel = 'low' | 'medium' | 'high';
 type PointOfView = 'third' | 'close_one' | 'alternating';
-type ConsentFrame = 'lovers' | 'negotiated' | 'reunion' | 'teasing';
+type ConsentFrame = string;
 
 interface AdultDraft {
   id: string;
   title: string;
   characterIds: string[];
   writerId: string;
+  style: string;
   heat: HeatLevel;
   pov: PointOfView;
   frame: ConsentFrame;
@@ -59,6 +60,21 @@ const playTags = [
   '低声确认',
 ];
 
+const frameLabelMap: Record<string, string> = Object.fromEntries(
+  frameOptions.map((item) => [item.id, `${item.label} - ${item.hint}`]),
+);
+
+const normalizeFrameText = (frame: string): string => (
+  frameLabelMap[frame] || frame || ''
+);
+
+const splitTags = (value: string): string[] => (
+  value
+    .split(/[、,，\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+);
+
 const loadDrafts = (): AdultDraft[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -86,6 +102,7 @@ const buildMessages = (
   writer: CharacterProfile | undefined,
   scene: string,
   content: string,
+  style: string,
   heat: HeatLevel,
   pov: PointOfView,
   frame: ConsentFrame,
@@ -99,7 +116,8 @@ const buildMessages = (
   )).join('\n\n---\n\n');
   const heatInfo = heatOptions.find((item) => item.id === heat);
   const povInfo = povOptions.find((item) => item.id === pov);
-  const frameInfo = frameOptions.find((item) => item.id === frame);
+  const styleText = style.trim() || '由场景自行决定，重人物关系与身体/心理张力';
+  const frameText = normalizeFrameText(frame).trim() || '成年人之间自愿、可回应、可停止的亲密关系';
   const previous = mode === 'continue' && content.trim()
     ? `\n\n已有正文，请在其后自然续写，不要重复开头：\n${content.trim()}`
     : '';
@@ -129,7 +147,8 @@ const buildMessages = (
 用户/导演名字：${userName || '用户'}（只用于理解委托来源，不得进入正文）
 执笔参考角色：${writer?.name || '全局模型'}
 尺度：${heatInfo?.label || heat} - ${heatInfo?.hint || ''}
-关系框架：${frameInfo?.label || frame} - ${frameInfo?.hint || ''}
+写作风格：${styleText}
+关系框架：${frameText}
 视角：${povInfo?.label || pov}
 玩法标签：${tags.length ? tags.join('、') : '无'}
 
@@ -150,9 +169,10 @@ const AdultFicApp: React.FC = () => {
   const [content, setContent] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(() => characters.slice(0, 2).map((char) => char.id));
   const [writerId, setWriterId] = useState(() => characters[0]?.id || '');
+  const [style, setStyle] = useState('');
   const [heat, setHeat] = useState<HeatLevel>('medium');
   const [pov, setPov] = useState<PointOfView>('third');
-  const [frame, setFrame] = useState<ConsentFrame>('lovers');
+  const [frame, setFrame] = useState<ConsentFrame>('成年人之间已有默契，但仍会在靠近时确认边界和回应。');
   const [tags, setTags] = useState<string[]>(['暧昧拉扯', '低声确认']);
   const [adultConfirmed, setAdultConfirmed] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -174,10 +194,6 @@ const AdultFicApp: React.FC = () => {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
   };
 
-  const toggleTag = (tag: string) => {
-    setTags((prev) => prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]);
-  };
-
   const clearComposer = () => {
     setActiveDraftId('');
     setTitle('');
@@ -185,9 +201,10 @@ const AdultFicApp: React.FC = () => {
     setContent('');
     setSelectedIds(characters.slice(0, 2).map((char) => char.id));
     setWriterId(characters[0]?.id || '');
+    setStyle('');
     setHeat('medium');
     setPov('third');
-    setFrame('lovers');
+    setFrame('成年人之间已有默契，但仍会在靠近时确认边界和回应。');
     setTags(['暧昧拉扯', '低声确认']);
     setAdultConfirmed(false);
   };
@@ -199,9 +216,10 @@ const AdultFicApp: React.FC = () => {
     setContent(draft.content);
     setSelectedIds(draft.characterIds);
     setWriterId(draft.writerId || draft.characterIds[0] || characters[0]?.id || '');
+    setStyle(draft.style || '');
     setHeat(draft.heat);
     setPov(draft.pov);
-    setFrame(draft.frame);
+    setFrame(normalizeFrameText(draft.frame));
     setTags(draft.tags || []);
     setAdultConfirmed(true);
   };
@@ -219,9 +237,10 @@ const AdultFicApp: React.FC = () => {
       title: draftTitle,
       characterIds: selectedIds,
       writerId: effectiveWriterId,
+      style: style.trim(),
       heat,
       pov,
-      frame,
+      frame: frame.trim(),
       tags,
       scene: cleanScene,
       content: cleanContent,
@@ -245,6 +264,15 @@ const AdultFicApp: React.FC = () => {
     const next = drafts.filter((draft) => draft.id !== id);
     persist(next, next[0]?.id || '');
     if (activeDraftId === id) clearComposer();
+  };
+
+  const clearAllDrafts = () => {
+    if (drafts.length === 0) return;
+    const ok = window.confirm('确定删除所有暗页存档吗？这个操作不能撤销。');
+    if (!ok) return;
+    persist([], '');
+    clearComposer();
+    addToast('暗页存档已清空', 'success');
   };
 
   const generate = async (mode: 'new' | 'continue') => {
@@ -276,7 +304,7 @@ const AdultFicApp: React.FC = () => {
         },
         body: JSON.stringify({
           model: writer?.apiModel?.trim() || apiConfig.model,
-          messages: buildMessages(selectedCharacters, writer, scene, content, heat, pov, frame, tags, userProfile.name, mode),
+          messages: buildMessages(selectedCharacters, writer, scene, content, style, heat, pov, frame, tags, userProfile.name, mode),
           temperature: 0.92,
           max_tokens: 4200,
           stream: false,
@@ -327,6 +355,18 @@ const AdultFicApp: React.FC = () => {
           </div>
         </div>
 
+        {drafts.length > 0 && (
+          <div className="border-b border-rose-200/10 p-3">
+            <button
+              onClick={clearAllDrafts}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-300/20 bg-red-500/10 px-4 text-sm font-bold text-red-200 active:scale-[0.99]"
+            >
+              <Trash size={18} />
+              删除全部暗页存档
+            </button>
+          </div>
+        )}
+
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {drafts.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-rose-100/15 p-5 text-center text-sm text-rose-100/45">
@@ -364,8 +404,9 @@ const AdultFicApp: React.FC = () => {
                 保存
               </button>
               {activeDraftId && (
-                <button onClick={() => deleteDraft(activeDraftId)} className="flex min-h-11 items-center justify-center rounded-full border border-red-300/20 bg-red-500/10 px-3 text-red-200">
+                <button onClick={() => deleteDraft(activeDraftId)} className="flex min-h-11 items-center gap-2 rounded-full border border-red-300/20 bg-red-500/10 px-4 text-sm font-bold text-red-200">
                   <Trash size={18} />
+                  删除当前
                 </button>
               )}
             </div>
@@ -418,6 +459,16 @@ const AdultFicApp: React.FC = () => {
               </div>
 
               <div className="rounded-3xl border border-rose-100/10 bg-white/[0.06] p-4">
+                <label className="text-xs font-black uppercase text-rose-200/50">风格</label>
+                <textarea
+                  value={style}
+                  onChange={(event) => setStyle(event.target.value)}
+                  placeholder="自填，比如：潮湿、克制、低声对白多；不要说明书感，偏文学片段。"
+                  className="mt-2 min-h-[90px] w-full resize-y rounded-2xl border border-rose-100/10 bg-black/20 px-4 py-3 text-sm leading-6 text-rose-50 outline-none placeholder:text-rose-100/25 focus:border-rose-200/50"
+                />
+              </div>
+
+              <div className="rounded-3xl border border-rose-100/10 bg-white/[0.06] p-4">
                 <div className="mb-3 text-xs font-black uppercase text-rose-200/50">尺度</div>
                 <div className="space-y-2">
                   {heatOptions.map((item) => (
@@ -436,41 +487,23 @@ const AdultFicApp: React.FC = () => {
               </div>
 
               <div className="rounded-3xl border border-rose-100/10 bg-white/[0.06] p-4">
-                <div className="mb-3 text-xs font-black uppercase text-rose-200/50">关系框架</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {frameOptions.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setFrame(item.id)}
-                      className={`rounded-2xl border px-3 py-2 text-left text-sm font-bold ${
-                        frame === item.id ? 'border-rose-200 bg-rose-200 text-[#211522]' : 'border-rose-100/10 bg-black/20 text-rose-50'
-                      }`}
-                      title={item.hint}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
+                <label className="text-xs font-black uppercase text-rose-200/50">关系框架</label>
+                <textarea
+                  value={frame}
+                  onChange={(event) => setFrame(event.target.value)}
+                  placeholder="自填关系前提，比如：重逢后还没说开，但彼此都知道可以停；一方嘴硬，一方更稳。"
+                  className="mt-2 min-h-[96px] w-full resize-y rounded-2xl border border-rose-100/10 bg-black/20 px-4 py-3 text-sm leading-6 text-rose-50 outline-none placeholder:text-rose-100/25 focus:border-rose-200/50"
+                />
               </div>
 
               <div className="rounded-3xl border border-rose-100/10 bg-white/[0.06] p-4">
-                <div className="mb-3 text-xs font-black uppercase text-rose-200/50">玩法标签</div>
-                <div className="flex flex-wrap gap-2">
-                  {playTags.map((tag) => {
-                    const active = tags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        onClick={() => toggleTag(tag)}
-                        className={`min-h-10 rounded-full border px-3 text-xs font-bold ${
-                          active ? 'border-rose-200 bg-rose-200 text-[#211522]' : 'border-rose-100/10 bg-black/20 text-rose-100/75'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
+                <label className="text-xs font-black uppercase text-rose-200/50">玩法</label>
+                <textarea
+                  value={tags.join('、')}
+                  onChange={(event) => setTags(splitTags(event.target.value))}
+                  placeholder="自填，用顿号/逗号/换行分隔，比如：暧昧拉扯、素股、低声确认、事后照顾"
+                  className="mt-2 min-h-[90px] w-full resize-y rounded-2xl border border-rose-100/10 bg-black/20 px-4 py-3 text-sm leading-6 text-rose-50 outline-none placeholder:text-rose-100/25 focus:border-rose-200/50"
+                />
               </div>
 
               <div className="rounded-3xl border border-rose-100/10 bg-white/[0.06] p-4">
@@ -532,6 +565,15 @@ const AdultFicApp: React.FC = () => {
                   <FloppyDisk size={18} weight="bold" />
                   保存
                 </button>
+                {activeDraftId && (
+                  <button
+                    onClick={() => deleteDraft(activeDraftId)}
+                    className="flex min-h-11 items-center gap-2 rounded-full border border-red-300/20 bg-red-500/10 px-5 py-2 text-sm font-bold text-red-200 md:hidden"
+                  >
+                    <Trash size={18} />
+                    删除当前
+                  </button>
+                )}
                 <button
                   onClick={copyContent}
                   disabled={!content.trim()}

@@ -51,6 +51,80 @@ const toPlaylistSong = (s: Song): CharPlaylistSong => ({
   albumPic: s.albumPic, duration: s.duration, fee: s.fee,
 });
 
+type MusicPickSource = 'user' | 'discovered';
+
+interface MusicPickHistoryEntry {
+  charId: string;
+  playlistId: string;
+  songId: number;
+  name: string;
+  primaryArtist: string;
+  album: string;
+  source: MusicPickSource;
+  pickedAt: number;
+}
+
+const MUSIC_PICK_HISTORY_KEY = 'sully_char_music_pick_history_v2';
+const MUSIC_PICK_HISTORY_LIMIT = 220;
+const MUSIC_PICK_HISTORY_WINDOW_MS = 1000 * 60 * 60 * 24 * 21;
+
+const primaryArtistOf = (artists?: string): string => (
+  (artists || '').split('/')[0]?.trim() || artists || 'unknown'
+);
+
+const loadMusicPickHistory = (): MusicPickHistoryEntry[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(MUSIC_PICK_HISTORY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(x => x && typeof x.songId === 'number') : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveMusicPickHistory = (entries: MusicPickHistoryEntry[]) => {
+  if (typeof window === 'undefined') return;
+  const cutoff = Date.now() - MUSIC_PICK_HISTORY_WINDOW_MS;
+  const trimmed = entries
+    .filter(x => x.pickedAt >= cutoff)
+    .sort((a, b) => b.pickedAt - a.pickedAt)
+    .slice(0, MUSIC_PICK_HISTORY_LIMIT);
+  try { window.localStorage.setItem(MUSIC_PICK_HISTORY_KEY, JSON.stringify(trimmed)); } catch {}
+};
+
+const recordMusicPicks = (
+  charId: string,
+  playlistId: string,
+  songs: CharPlaylistSong[],
+) => {
+  const now = Date.now();
+  const next = [
+    ...songs.map((s): MusicPickHistoryEntry => ({
+      charId,
+      playlistId,
+      songId: s.id,
+      name: s.name,
+      primaryArtist: primaryArtistOf(s.artists),
+      album: s.album || 'unknown',
+      source: (s.source || 'discovered') as MusicPickSource,
+      pickedAt: now,
+    })),
+    ...loadMusicPickHistory(),
+  ];
+  saveMusicPickHistory(next);
+};
+
+const stableHash = (input: string): number => {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
+
+const stableJitter = (seed: string): number => (stableHash(seed) % 1000) / 1000;
+
 const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
   const { characters, updateCharacter, userProfile, apiConfig, addToast } = useOS();
   const {
@@ -186,26 +260,65 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
 
       // 跨歌单去重：本角色其它歌单已经有的歌不要再塞进来
       const usedInOthers = new Set<number>();
+      const artistsInOtherPlaylists = new Map<string, number>();
       for (const other of profile.playlists) {
         if (other.id === pl.id) continue;
-        for (const s of other.songs) usedInOthers.add(s.id);
+        for (const s of other.songs) {
+          usedInOthers.add(s.id);
+          const artist = primaryArtistOf(s.artists);
+          artistsInOtherPlaylists.set(artist, (artistsInOtherPlaylists.get(artist) || 0) + 1);
+        }
       }
 
-      type Candidate = Song & { score: number; firstQueryIdx: number; hitCount: number };
+      const recentHistory = loadMusicPickHistory()
+        .filter(x => x.charId === char.id && Date.now() - x.pickedAt < MUSIC_PICK_HISTORY_WINDOW_MS);
+      const recentSongIds = new Set(recentHistory.map(x => x.songId));
+      const recentArtistUse = new Map<string, number>();
+      const recentAlbumUse = new Map<string, number>();
+      for (const item of recentHistory) {
+        recentArtistUse.set(item.primaryArtist, (recentArtistUse.get(item.primaryArtist) || 0) + 1);
+        recentAlbumUse.set(item.album, (recentAlbumUse.get(item.album) || 0) + 1);
+      }
+
+      type Candidate = Song & {
+        score: number;
+        firstQueryIdx: number;
+        hitCount: number;
+        sourceBucket: string;
+        playlistSourceId?: number;
+      };
       const candidates = new Map<number, Candidate>();
       const userCandidates = new Map<number, Candidate>();
       const currentIds = new Set(pl.songs.map(s => s.id));
-      const scoreSong = (s: Song, qi: number, rank: number, sourceBonus = 0): Candidate => {
+      const pickRunSeed = `${Date.now()}:${char.id}:${pl.id}`;
+      const scoreSong = (
+        s: Song,
+        qi: number,
+        rank: number,
+        sourceBonus = 0,
+        sourceBucket = `query:${qi}`,
+        playlistSourceId?: number,
+      ): Candidate => {
         const baseScore = 100 - qi * 3 - rank * 3;
         const artistNames = (s.artists || '').split('/').map(a => a.trim()).filter(Boolean);
+        const primaryArtist = primaryArtistOf(s.artists);
+        const album = s.album || 'unknown';
         const signatureHit = artistNames.some(a => allArtists.some(sa => sa === a));
         const genreHit = allGenres.some(g => `${s.name} ${s.album} ${s.artists}`.includes(g));
         const anchorHit = artistNames.some(a => anchorArtists.includes(a));
+        const songPenalty = recentSongIds.has(s.id) ? 90 : 0;
+        const recentArtistPenalty = (recentArtistUse.get(primaryArtist) || 0) * 18;
+        const recentAlbumPenalty = (recentAlbumUse.get(album) || 0) * 14;
+        const profileArtistPenalty = (artistsInOtherPlaylists.get(primaryArtist) || 0) * 10;
+        const jitter = stableJitter(`${pickRunSeed}:${s.id}:${sourceBucket}`) * 12;
         return {
           ...s,
-          score: baseScore + sourceBonus + (anchorHit ? 24 : 0) + (signatureHit ? 12 : 0) + (genreHit ? 5 : 0) + Math.random() * 5,
+          score: baseScore + sourceBonus + (anchorHit ? 24 : 0) + (signatureHit ? 12 : 0) + (genreHit ? 5 : 0)
+            + jitter - songPenalty - recentArtistPenalty - recentAlbumPenalty - profileArtistPenalty,
           firstQueryIdx: qi,
           hitCount: 1,
+          sourceBucket,
+          playlistSourceId,
         };
       };
 
@@ -223,7 +336,7 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
               existed.hitCount += 1;
               existed.firstQueryIdx = Math.min(existed.firstQueryIdx, qi);
             } else {
-              candidates.set(s.id, scoreSong(s, qi, rank));
+              candidates.set(s.id, scoreSong(s, qi, rank, 0, `query:${kw}`));
             }
           }
         } catch { /* 单个关键词失败不阻塞 */ }
@@ -266,7 +379,17 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
                 existed.score += 14;
                 existed.hitCount += 1;
               } else {
-                userCandidates.set(s.id, scoreSong(s, pi, rank, 32 + (artistHit ? 18 : 0) + (genreHit ? 8 : 0)));
+                userCandidates.set(
+                  s.id,
+                  scoreSong(
+                    s,
+                    pi,
+                    rank,
+                    32 + (artistHit ? 18 : 0) + (genreHit ? 8 : 0),
+                    `user:${up.id}`,
+                    up.id,
+                  ),
+                );
               }
             }
           }
@@ -275,18 +398,23 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
 
       const artistUse = new Map<string, number>();
       const albumUse = new Map<string, number>();
+      const sourceBucketUse = new Map<string, number>();
+      const userPlaylistUse = new Map<number, number>();
       const picked: CharPlaylistSong[] = [];
       const pickedIds = new Set<number>();
-      const canTake = (c: Song, relaxed = false) => {
+      const canTake = (c: Candidate, relaxed = false) => {
         if (pickedIds.has(c.id)) return false;
-        const primaryArtist = (c.artists || '').split('/')[0]?.trim() || c.artists || 'unknown';
+        if (!relaxed && recentSongIds.has(c.id)) return false;
+        const primaryArtist = primaryArtistOf(c.artists);
         const album = c.album || 'unknown';
         if ((artistUse.get(primaryArtist) || 0) >= (relaxed ? 3 : 2)) return false;
         if (!relaxed && (albumUse.get(album) || 0) >= 1) return false;
+        if (!relaxed && (sourceBucketUse.get(c.sourceBucket) || 0) >= 2) return false;
+        if (!relaxed && c.playlistSourceId && (userPlaylistUse.get(c.playlistSourceId) || 0) >= 1) return false;
         return true;
       };
-      const take = (c: Song, source: 'user' | 'discovered') => {
-        const primaryArtist = (c.artists || '').split('/')[0]?.trim() || c.artists || 'unknown';
+      const take = (c: Candidate, source: MusicPickSource) => {
+        const primaryArtist = primaryArtistOf(c.artists);
         const album = c.album || 'unknown';
         picked.push({
           ...toPlaylistSong(c),
@@ -296,13 +424,26 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
         pickedIds.add(c.id);
         artistUse.set(primaryArtist, (artistUse.get(primaryArtist) || 0) + 1);
         albumUse.set(album, (albumUse.get(album) || 0) + 1);
+        sourceBucketUse.set(c.sourceBucket, (sourceBucketUse.get(c.sourceBucket) || 0) + 1);
+        if (c.playlistSourceId) userPlaylistUse.set(c.playlistSourceId, (userPlaylistUse.get(c.playlistSourceId) || 0) + 1);
       };
-      for (const c of Array.from(userCandidates.values()).sort((a, b) => b.score - a.score)) {
+      const byScore = (arr: Candidate[]) => arr.sort((a, b) => b.score - a.score);
+      const userPool = byScore(Array.from(userCandidates.values()));
+      for (const c of userPool) {
         if (picked.length >= 2) break;
         if (!canTake(c)) continue;
         take(c, 'user');
       }
-      const pool = Array.from(candidates.values()).sort((a, b) => b.score - a.score);
+      // If the user's library fits the character, keep it as 1-2 anchor songs.
+      // It should not collapse the whole character playlist into the same user taste cluster.
+      if (picked.length === 0) {
+        for (const c of userPool) {
+          if (!canTake(c, true)) continue;
+          take(c, 'user');
+          break;
+        }
+      }
+      const pool = byScore(Array.from(candidates.values()));
 
       for (const c of pool) {
         if (picked.length >= 8) break;
@@ -335,6 +476,7 @@ const CharVisitPage: React.FC<Props> = ({ charId, onBack, onOpenPlayer }) => {
         updatedAt: Date.now(),
       };
       updateCharacter(char.id, { musicProfile: updatedProfile });
+      recordMusicPicks(char.id, pl.id, picked);
       addToast(`已为《${pl.title}》填入 ${picked.length} 首歌`, 'success');
     } catch (e: any) {
       addToast(`填充失败：${e.message}`, 'error');
