@@ -24,9 +24,9 @@ import { getEmbeddings, cosineSimilarity } from './embedding';
 import { extractGroupMemoriesFromBuffer } from './groupExtraction';
 import { isMessageSemanticallyRelevant } from '../messageFormat';
 
-// ─── 群聊水位线：私聊用 200/100，群聊更宽松 300/200 ─────────────────
-const HOT_ZONE_SIZE_GROUP = 300;
-const BUFFER_THRESHOLD_GROUP = 200;
+// ─── 群聊水位线：和私聊保持同级，让群聊记忆不用等太久才沉淀 ─────────────
+const HOT_ZONE_SIZE_GROUP = 200;
+const BUFFER_THRESHOLD_GROUP = 100;
 const PROCESS_RATIO = 0.85;
 const DEDUP_THRESHOLD = 0.9;
 
